@@ -15,6 +15,22 @@ export const PrivacyProvider = ({ children }) => {
   const [auditLogs, setAuditLogs] = useState([]);
   const [backendActive, setBackendActive] = useState(false);
 
+  // Feature toggles — persisted in localStorage
+  const [featureToggles, setFeatureToggles] = useState(() => {
+    try {
+      const saved = localStorage.getItem('privacylens_feature_toggles');
+      return saved ? JSON.parse(saved) : { breachReporter: true, penaltyShield: true };
+    } catch { return { breachReporter: true, penaltyShield: true }; }
+  });
+
+  const toggleFeature = (key) => {
+    setFeatureToggles(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('privacylens_feature_toggles', JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState('ALL'); // ALL, High, Medium, Low
@@ -763,7 +779,9 @@ export const PrivacyProvider = ({ children }) => {
         executeTier2Initiate,
         triggerTier3Letter,
         executeTier3Submit,
-        resetDashboard
+        resetDashboard,
+        featureToggles,
+        toggleFeature
       }}
     >
       {children}
