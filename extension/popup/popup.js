@@ -486,7 +486,14 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
   const summariesMap = storage.websiteSummaries || {};
   const cachedData = storage[cacheKey] || summariesMap[normDomain];
 
-  if (cachedData && !forceRefresh) {
+  // Helper to check if cached bullets contain fallback unavailable error messages
+  const isUnavailableCache = (data) => {
+    if (!data || !data.bullets || !Array.isArray(data.bullets) || data.bullets.length === 0) return true;
+    const combined = data.bullets.join(' ').toLowerCase();
+    return combined.includes('unavailable') || combined.includes('unable to generate');
+  };
+
+  if (cachedData && !forceRefresh && !isUnavailableCache(cachedData)) {
     siteTitle.textContent = cachedData.websiteName || normDomain;
     const bullets = cachedData.bullets || (cachedData.summary ? [cachedData.summary] : []);
     textEl.textContent = Array.isArray(bullets) ? bullets.join('\n') : bullets;
@@ -540,7 +547,7 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
       body: JSON.stringify({
         domain: normDomain,
         websiteName: domMetadata.title ? domMetadata.title.split('|')[0].trim() : normDomain,
-        language: currentSelectedLanguage,
+        language: 'EN',
         pageTitle: domMetadata.title || activeTabState.title,
         metaDescription: domMetadata.metaDescription || '',
         headings: domMetadata.headings || [],
