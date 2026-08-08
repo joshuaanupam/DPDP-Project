@@ -36,7 +36,7 @@ app.get('/api/dashboard/:userId', dashboardController.getDashboardData);
 // 3-Tier Privacy Requests
 app.post('/api/requests/create', requestController.createPrivacyRequest);
 app.get('/api/requests/:userId', requestController.getUserRequests);
-  app.post('/api/requests/:requestId/status', requestController.updateRequestStatus);
+app.post('/api/requests/:requestId/status', requestController.updateRequestStatus);
 
 // Audit Trail Logs
 app.get('/api/audit/:userId', auditController.getAuditLogs);
@@ -45,33 +45,19 @@ app.get('/api/audit/:userId', auditController.getAuditLogs);
 app.get('/api/websites/:websiteId', websiteController.getWebsiteDetail);
 
 // Reset Demo Database
-app.post('/api/demo/reset', async (req, res, next) => {
-  const { PrismaClient } = require('@prisma/client');
-  const prisma = new PrismaClient();
+app.post('/api/demo/reset', async (req, res) => {
   try {
-    await prisma.auditLog.deleteMany();
-    await prisma.privacyRequest.deleteMany();
-    await prisma.consent.deleteMany();
-    await prisma.dataItem.deleteMany();
-    await prisma.website.deleteMany();
-    await prisma.user.deleteMany();
-
-    await prisma.user.create({
-      data: {
-        id: 'usr_12345',
-        name: 'Joshua',
-        email: 'joshua@example.com',
-        passwordHash: 'hashed_demo_password',
-        privacyScore: 100
-      }
-    });
-
-    console.log('🧹 Live Demo Reset executed from Dashboard.');
-    res.json({ success: true, message: 'Database reset successfully.' });
+    const { runSeed } = require('./prisma/seed');
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    await runSeed(prismaClient);
+    await prismaClient.$disconnect();
+    
+    res.json({ success: true, message: 'Database successfully reset and re-seeded with default websites and consents.' });
   } catch (err) {
-    next(err);
-  } finally {
-    await prisma.$disconnect();
+    console.error('Error resetting database:', err);
+    res.status(500).json({ success: false, message: 'Failed to reset database', error: err.message });
   }
 });
 
