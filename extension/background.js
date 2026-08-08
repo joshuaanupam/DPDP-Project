@@ -1,20 +1,33 @@
 // background.js - RECLAIM Privacy Exposure Service Worker
-// Manages: Full Exposure Database, Rolling 5-Event Recent Events Queue, Risk Engine, and Demo Data
+// Manages: Full Exposure Database, Real Website Visit Activity (Rolling 5 Unique Domains Queue), Risk Engine, and Demo Isolation
 
 const BACKEND_API = 'http://localhost:5000/api/events';
-const MAX_EXPOSURE_RECORDS = 200; // Database limit for unique domains
-const MAX_RECENT_EVENTS = 5;      // Strict 5-event limit for popup rolling list
+const MAX_EXPOSURE_RECORDS = 200; // Database limit for unique domain exposure records
+const MAX_RECENT_VISITS = 5;      // Strict 5-item limit for Recent Website Activity
 
 /**
  * Normalizes host domain for display and storage consistency (e.g. www.amazon.in -> amazon.in)
  */
 function normalizeDomain(hostname) {
-  if (!hostname) return 'unknown';
+  if (!hostname) return '';
   let domain = hostname.toLowerCase().trim().split(':')[0];
   if (domain.startsWith('www.')) {
     domain = domain.substring(4);
   }
   return domain;
+}
+
+/**
+ * Filters out internal browser/extension URLs (chrome://, edge://, file://, chrome-extension://, etc.)
+ */
+function isInternalUrl(urlOrDomain) {
+  if (!urlOrDomain) return true;
+  const lower = urlOrDomain.toLowerCase().trim();
+  const internalPrefixes = [
+    'chrome://', 'chrome-extension://', 'edge://', 'about:',
+    'devtools://', 'file://', 'blob:', 'data:', 'view-source:'
+  ];
+  return internalPrefixes.some(prefix => lower.startsWith(prefix)) || lower === 'unknown' || lower === 'newtab';
 }
 
 // Configurable Cleanup Method Registry for popular domains
@@ -30,7 +43,7 @@ const CLEANUP_REGISTRY = {
   'oldshopping.com': { method: 'official_page', url: 'https://example.com/delete-account', type: 'account_deletion' }
 };
 
-// Hackathon Demo Dataset (Pre-populated sample database)
+// Hackathon Demo Dataset (Used ONLY when Demo Mode is explicitly enabled by user)
 const DEMO_EXPOSURES = {
   'oldshopping.com': {
     id: 'exp_demo_1',
@@ -123,13 +136,13 @@ const DEMO_EXPOSURES = {
   }
 };
 
-// Demo Recent Events Queue (5 initial rolling demo events: newest -> oldest)
-const DEMO_RECENT_EVENTS = [
-  { eventId: 'evt_demo_1', domain: 'myntra.com', dataTypes: ['email'], consents: ['marketing'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString() },
-  { eventId: 'evt_demo_2', domain: 'croma.com', dataTypes: ['email', 'phone'], consents: ['terms'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
-  { eventId: 'evt_demo_3', domain: 'instagram.com', dataTypes: ['email'], consents: ['terms'], riskLevel: 'medium', timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString() },
-  { eventId: 'evt_demo_4', domain: 'flipkart.com', dataTypes: ['email', 'phone'], consents: ['marketing'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString() },
-  { eventId: 'evt_demo_5', domain: 'amazon.in', dataTypes: ['email', 'phone', 'name'], consents: ['marketing'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString() }
+// Demo Recent Visits Queue (Used ONLY when Demo Mode is explicitly enabled by user)
+const DEMO_RECENT_VISITS = [
+  { domain: 'myntra.com', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), isDemo: true },
+  { domain: 'croma.com', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), isDemo: true },
+  { domain: 'instagram.com', timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(), isDemo: true },
+  { domain: 'flipkart.com', timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), isDemo: true },
+  { domain: 'amazon.in', timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), isDemo: true }
 ];
 
 /**
@@ -202,19 +215,16 @@ function getCleanupMethod(domain) {
   };
 }
 
-// Initial Extension Setup
+// Initial Extension Setup (Starts Completely CLEAN in Real User Mode)
 chrome.runtime.onInstalled.addListener(async () => {
-  const data = await chrome.storage.local.get(['exposures']);
-  if (!data.exposures || Object.keys(data.exposures).length === 0) {
+  const data = await chrome.storage.local.get(['reclaimEnabled']);
+  if (data.reclaimEnabled === undefined) {
     await chrome.storage.local.set({
-      exposures: DEMO_EXPOSURES,
-      recentEvents: DEMO_RECENT_EVENTS,
-      demoMode: true,
-      timeline: [
-        { domain: 'oldshopping.com', action: 'Form Submission - Email, Phone, Name', timestamp: new Date(Date.now() - 300 * 24 * 3600 * 1000).toISOString() },
-        { domain: 'couponcollector.io', action: 'Marketing Consent Granted', timestamp: new Date(Date.now() - 120 * 24 * 3600 * 1000).toISOString() },
-        { domain: 'devtooling.org', action: 'Form Submission - Email', timestamp: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString() }
-      ]
+      reclaimEnabled: true,
+      demoMode: false,
+      exposures: {},            // Clean exposures DB for real user
+      recentWebsiteVisits: [],  // Clean recent visits queue for real user
+      timeline: []
     });
   }
 });
@@ -225,7 +235,9 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return;
 
-  if (message.type === 'FORM_SUBMISSION') {
+  if (message.type === 'PAGE_VISIT') {
+    processWebsiteVisit(message);
+  } else if (message.type === 'FORM_SUBMISSION') {
     processExposureEvent(message);
     sendToBackend(message);
   } else if (message.type === 'UPDATE_CLEANUP_STATUS') {
@@ -240,6 +252,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+/**
+ * Processes Real Website Navigation Visit
+ * Maintains rolling 5 most recently visited UNIQUE domains.
+ */
+async function processWebsiteVisit(data) {
+  const domain = normalizeDomain(data.domain);
+  if (!domain || isInternalUrl(domain) || isInternalUrl(data.url)) {
+    return; // Ignore internal browser pages (chrome://, edge://, extension pages, file://)
+  }
+
+  const storage = await chrome.storage.local.get(['recentWebsiteVisits', 'reclaimEnabled', 'demoMode']);
+  
+  // Stop recording if RECLAIM is disabled by user
+  if (storage.reclaimEnabled === false) return;
+
+  const isDemo = storage.demoMode || false;
+  let visits = storage.recentWebsiteVisits || [];
+
+  const now = data.timestamp || new Date().toISOString();
+
+  // Deduplication logic for Recent Website Activity:
+  // If domain was previously visited, remove old entry so it moves to top with latest timestamp
+  visits = visits.filter(v => normalizeDomain(v.domain) !== domain);
+
+  // Insert newest visit at index 0 (TOP)
+  visits.unshift({
+    domain: domain,
+    timestamp: now,
+    isDemo: isDemo
+  });
+
+  // Limit to maximum 5 unique recent domains
+  if (visits.length > MAX_RECENT_VISITS) {
+    visits = visits.slice(0, MAX_RECENT_VISITS);
+  }
+
+  await chrome.storage.local.set({ recentWebsiteVisits: visits });
+  chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+}
 
 /**
  * Updates cleanup status for a domain in main exposures DB
@@ -271,17 +323,18 @@ async function handleUpdateCleanupStatus(domain, status) {
 }
 
 /**
- * Toggles Demo Mode data loading
+ * Toggles Demo Mode data loading (Strictly isolated from real user mode)
  */
 async function handleToggleDemoMode(enableDemo) {
   if (enableDemo) {
     await chrome.storage.local.set({
       exposures: DEMO_EXPOSURES,
-      recentEvents: DEMO_RECENT_EVENTS,
+      recentWebsiteVisits: DEMO_RECENT_VISITS,
       demoMode: true
     });
   } else {
-    const data = await chrome.storage.local.get(['exposures', 'recentEvents']);
+    // Clear demo data cleanly, preserving real user records if any exist
+    const data = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits']);
     const exposures = data.exposures || {};
     const realExposures = {};
 
@@ -291,11 +344,11 @@ async function handleToggleDemoMode(enableDemo) {
       }
     });
 
-    const realRecentEvents = (data.recentEvents || []).filter(e => e.eventId && !e.eventId.startsWith('evt_demo_'));
+    const realVisits = (data.recentWebsiteVisits || []).filter(v => !v.isDemo);
 
     await chrome.storage.local.set({
       exposures: realExposures,
-      recentEvents: realRecentEvents,
+      recentWebsiteVisits: realVisits,
       demoMode: false
     });
   }
@@ -304,12 +357,12 @@ async function handleToggleDemoMode(enableDemo) {
 }
 
 /**
- * Clears all local exposure data
+ * Clears all local exposure & activity data
  */
 async function handleClearAllData() {
   await chrome.storage.local.set({
     exposures: {},
-    recentEvents: [],
+    recentWebsiteVisits: [],
     timeline: [],
     demoMode: false
   });
@@ -317,27 +370,25 @@ async function handleClearAllData() {
 }
 
 /**
- * Process incoming real form submission event.
- * Maintains:
- * 1. FULL EXPOSURE DATABASE (`exposures` map) - NOT capped at 5!
- * 2. RECENT EXPOSURE EVENTS (`recentEvents` queue) - Capped strictly at MAX_RECENT_EVENTS (5)!
- * 3. TIMELINE (`timeline` array) - Historical audit trail.
+ * Process incoming form submission event.
+ * Records EXPOSURE in main exposures DB (not website visit queue).
  */
 async function processExposureEvent(event) {
   try {
-    const storageData = await chrome.storage.local.get(['exposures', 'recentEvents', 'timeline']);
+    const storageData = await chrome.storage.local.get(['exposures', 'timeline', 'reclaimEnabled']);
+    if (storageData.reclaimEnabled === false) return;
+
     let exposures = storageData.exposures || {};
-    let recentEvents = storageData.recentEvents || [];
     let timeline = storageData.timeline || [];
 
     const domain = normalizeDomain(event.domain);
+    if (!domain || isInternalUrl(domain)) return;
+
     const now = new Date().toISOString();
     const existing = exposures[domain];
 
-    // Evaluate risk level for the new event
     const { riskLevel, riskReasons } = evaluateRisk(event.dataTypes || [], event.consents || [], now);
 
-    // 1. UPDATE FULL EXPOSURE DATABASE (exposures) - UNLIMITED / NOT capped at 5!
     if (existing) {
       const mergedDataTypes = Array.from(new Set([...(existing.dataTypes || []), ...(event.dataTypes || [])]));
       const mergedConsentTypes = Array.from(new Set([...(existing.consentTypes || []), ...(event.consents || [])]));
@@ -376,26 +427,7 @@ async function processExposureEvent(event) {
       delete exposures[sortedKeys[0]];
     }
 
-    // 2. UPDATE ROLLING 5-EVENT RECENT EVENTS QUEUE (recentEvents) - Strictly Capped at 5!
-    const newRecentEvent = {
-      eventId: event.eventId || ('evt_' + Math.random().toString(36).substring(2, 11)),
-      domain: domain, // Normalized domain (e.g. amazon.in)
-      dataTypes: event.dataTypes || [],
-      consents: event.consents || [],
-      riskLevel: riskLevel,
-      timestamp: now,
-      eventType: event.eventType || 'FORM_SUBMISSION'
-    };
-
-    // Insert at index 0 (newest at TOP)
-    recentEvents.unshift(newRecentEvent);
-
-    // If 6th event occurs, remove the oldest (last item)
-    if (recentEvents.length > MAX_RECENT_EVENTS) {
-      recentEvents.pop();
-    }
-
-    // 3. UPDATE TIMELINE
+    // Update timeline
     timeline.unshift({
       domain: domain,
       action: `Form Submission Detected (${(event.dataTypes || []).join(', ')})`,
@@ -404,10 +436,10 @@ async function processExposureEvent(event) {
     if (timeline.length > 50) timeline = timeline.slice(0, 50);
 
     // Save to chrome.storage.local
-    await chrome.storage.local.set({ exposures, recentEvents, timeline });
+    await chrome.storage.local.set({ exposures, timeline });
 
-    // Broadcast real-time update to popup and open tabs
-    chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+    // Also trigger website visit update for the domain
+    await processWebsiteVisit({ domain: domain, timestamp: now });
 
   } catch (err) {
     console.error('RECLAIM Service Worker Storage Error:', err);

@@ -1,4 +1,4 @@
-// content.js - RECLAIM Privacy Exposure Interceptor
+// content.js - RECLAIM Privacy Exposure Interceptor & Website Visit Monitor
 // Privacy-by-Design: Extracts ONLY metadata categories. Never harvests values, passwords, or PII.
 
 // Explicitly forbidden input types, names, and autocomplete attributes for security
@@ -159,3 +159,16 @@ document.addEventListener('submit', (e) => {
     }
   }
 }, true);
+
+// Passively notify background script of website page navigation (for Recent Website Activity tracking)
+if (window.location.protocol.startsWith('http')) {
+  const currentDomain = normalizeDomain(window.location.hostname);
+  if (currentDomain && currentDomain !== 'unknown') {
+    chrome.runtime.sendMessage({
+      type: 'PAGE_VISIT',
+      domain: currentDomain,
+      url: window.location.href,
+      timestamp: new Date().toISOString()
+    }).catch(() => {});
+  }
+}

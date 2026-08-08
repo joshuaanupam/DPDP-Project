@@ -1,14 +1,14 @@
 // popup.js - RECLAIM Extension Popup UI Controller
 
-const MAX_RECENT_EVENTS_DISPLAY = 5;
+const MAX_RECENT_VISITS_DISPLAY = 5;
 
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await refreshUI();
 
-  // Listen for real-time storage updates (instantly updates open popup when 6th/7th event occurs)
+  // Listen for real-time storage updates (instantly updates open popup when user navigates or submits)
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && (changes.recentEvents || changes.exposures)) {
+    if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode)) {
       refreshUI();
     }
   });
@@ -31,7 +31,7 @@ function setupEventListeners() {
 }
 
 /**
- * Reusable domain normalizer (e.g. www.amazon.in -> amazon.in)
+ * Reusable domain normalizer (e.g. https://www.amazon.in/product -> amazon.in)
  */
 function normalizeDomain(hostname) {
   if (!hostname) return '';
@@ -43,7 +43,7 @@ function normalizeDomain(hostname) {
 }
 
 /**
- * Calculates overall privacy health score (0-100) based on full exposure database
+ * Calculates overall privacy health score (0-100) based on exposure database
  */
 function calculatePrivacyScore(exposuresObj) {
   const records = Object.values(exposuresObj || {});
@@ -68,11 +68,25 @@ function calculatePrivacyScore(exposuresObj) {
  * Main UI refresh loop
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentEvents']);
-  const exposures = storage.exposures || {};
-  const recentEvents = storage.recentEvents || [];
+  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode']);
+  const allExposures = storage.exposures || {};
+  let visits = storage.recentWebsiteVisits || [];
+  const isDemo = storage.demoMode || false;
 
-  // 1. Fetch current tab domain
+  // Filter exposure records and visits based on Demo Mode isolation
+  const activeExposures = {};
+  Object.keys(allExposures).forEach(domainKey => {
+    const record = allExposures[domainKey];
+    if (isDemo || !record.isDemo) {
+      activeExposures[domainKey] = record;
+    }
+  });
+
+  if (!isDemo) {
+    visits = visits.filter(v => !v.isDemo);
+  }
+
+  // 1. Fetch current active tab domain
   let currentDomain = '';
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -86,14 +100,14 @@ async function refreshUI() {
     console.error('Failed to parse current tab URL:', e);
   }
 
-  // Render Current Site Section
-  renderCurrentSite(currentDomain, exposures[currentDomain]);
+  // Render Current Site Section (uses activeExposures)
+  renderCurrentSite(currentDomain, activeExposures[currentDomain]);
 
-  // Render Overall Overview Metrics & Privacy Score (from Full Exposure Database)
-  renderExposureOverview(exposures);
+  // Render Overall Overview Metrics & Privacy Score
+  renderExposureOverview(activeExposures);
 
-  // Render Recent Exposure Activity (Rolling 5-Event List)
-  renderRecentEvents(recentEvents, exposures);
+  // Render Recent Website Activity List (rolling 5 most recently visited unique domains)
+  renderRecentVisits(visits);
 }
 
 /**
@@ -166,48 +180,45 @@ function renderExposureOverview(exposures) {
 }
 
 /**
- * Renders recent exposure history (Strictly 5 Most Recent Events in Chronological Recency Order)
+ * Renders Recent Website Activity (Rolling 5 Most Recently Visited Unique Domains)
  */
-function renderRecentEvents(recentEvents, exposures) {
+function renderRecentVisits(visits) {
   const listEl = document.getElementById('recent-exposure-list');
+  if (!listEl) return;
   
-  if (!recentEvents || recentEvents.length === 0) {
-    listEl.innerHTML = '<div class="no-events" style="font-size: 12px; color: #94a3b8; text-align: center; padding: 12px 0;">No recent exposure events.</div>';
+  if (!visits || visits.length === 0) {
+    listEl.innerHTML = '<div style="font-size: 12px; color: #94a3b8; text-align: center; padding: 12px 0;">No recent website activity.</div>';
     return;
   }
 
   listEl.innerHTML = '';
 
-  // Take maximum 5 events (index 0 is newest)
-  const displayEvents = recentEvents.slice(0, MAX_RECENT_EVENTS_DISPLAY);
+  // Take maximum 5 unique domain visits (newest at TOP)
+  const displayVisits = visits.slice(0, MAX_RECENT_VISITS_DISPLAY);
 
-  displayEvents.forEach(evt => {
+  displayVisits.forEach(v => {
     const item = document.createElement('div');
     item.className = 'recent-item';
 
-    const normalizedDom = normalizeDomain(evt.domain);
-    const siteExp = exposures[normalizedDom];
-    const risk = evt.riskLevel || (siteExp ? siteExp.riskLevel : 'low');
+    const normalizedDom = normalizeDomain(v.domain);
     
-    // User-friendly time format (e.g. 2:15 PM)
+    // Format timestamp to user-friendly time string (e.g. 02:16 PM)
     let formattedTime = '';
-    if (evt.timestamp) {
+    if (v.timestamp) {
       try {
-        formattedTime = new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        formattedTime = new Date(v.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       } catch (e) {
         formattedTime = '';
       }
     }
 
-    // Short risk label (LOW, MED, HIGH)
-    const riskLabel = risk === 'medium' ? 'MED' : risk.toUpperCase();
+    const demoBadge = v.isDemo ? '<span style="font-size:9px; background:#fef3c7; color:#92400e; padding:1px 4px; border-radius:3px; margin-left:4px;">DEMO</span>' : '';
 
     item.innerHTML = `
       <div>
-        <strong style="color: #1e293b;">${normalizedDom}</strong>
-        <span style="font-size: 10px; color: #94a3b8; margin-left: 6px;">${formattedTime}</span>
+        <strong style="color: #1e293b;">${normalizedDom}</strong> ${demoBadge}
       </div>
-      <span class="risk-pill risk-${risk}" style="font-size: 9px; padding: 1px 6px;">${riskLabel}</span>
+      <span style="font-size: 11px; color: #64748b; font-weight: 500;">${formattedTime}</span>
     `;
 
     listEl.appendChild(item);
