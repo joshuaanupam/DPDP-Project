@@ -106,6 +106,38 @@ export const PrivacyProvider = ({ children }) => {
     }
   };
 
+  // Execute User Registration
+  const register = async (name, email, password) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem('privacylens_token', data.token);
+        setUserData(data.user);
+        setIsAuthenticated(true);
+        setBackendActive(true);
+
+        window.postMessage({
+          direction: 'from-page',
+          type: 'SetExtensionSession',
+          detail: { token: data.token, user: data.user }
+        }, '*');
+
+        await fetchDashboardData(data.user.id);
+        await fetchRequests(data.user.id);
+        await fetchAuditLogs(data.user.id);
+        return { success: true };
+      }
+      return { success: false, message: data.message || 'Registration failed.' };
+    } catch (err) {
+      return { success: false, message: 'Could not connect to backend authentication server.' };
+    }
+  };
+
   // Execute User Logout
   const logout = () => {
     localStorage.removeItem('privacylens_token');
@@ -168,6 +200,108 @@ export const PrivacyProvider = ({ children }) => {
   });
 
   const processedSyncIds = React.useRef(new Set());
+
+  // Restore Authentication Session & Sync Check on Mount
+  React.useEffect(() => {
+    const token = localStorage.getItem('privacylens_token');
+
+    // Listener for response from extension via postMessage
+    const handleAuthMessage = (e) => {
+      const message = e.data;
+      if (message && message.direction === 'from-content-script') {
+        console.log('[PrivacyLens Dashboard] Received auth message from content script:', message);
+        if (message.type === 'ExtensionSessionResponse') {
+          console.log('[PrivacyLens Dashboard] Extension is Active (received session response)');
+          setExtensionStatus('Active');
+          hasDetectedExtension.current = true;
+          if (pingTimeoutRef.current) {
+            clearTimeout(pingTimeoutRef.current);
+            pingTimeoutRef.current = null;
+          }
+
+          const extensionSession = message.detail;
+          if (extensionSession && extensionSession.token) {
+            localStorage.setItem('privacylens_token', extensionSession.token);
+            validateSession(extensionSession.token);
+          } else {
+            setAuthLoading(false);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleAuthMessage);
+
+    if (token) {
+      validateSession(token);
+    } else {
+      // Query extension to see if it has a session via postMessage
+      window.postMessage({ direction: 'from-page', type: 'GetExtensionSession' }, '*');
+
+      // Fallback timeout to ensure dashboard shows login if extension is offline or no session
+      const timer = setTimeout(() => {
+        setAuthLoading(false);
+      }, 1000);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('message', handleAuthMessage);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('message', handleAuthMessage);
+    };
+  }, []);
+
+  // Heartbeat query for MV3 extension status (Installed/Enabled -> Active, Disabled -> Off, Not Installed -> Not Installed)
+  React.useEffect(() => {
+    const handlePingPong = (e) => {
+      const message = e.data;
+      if (message && message.direction === 'from-content-script' && message.type === 'PongExtension') {
+        console.log('[PrivacyLens Dashboard] Received PongExtension from content script');
+        setExtensionStatus('Active');
+        hasDetectedExtension.current = true;
+        if (pingTimeoutRef.current) {
+          clearTimeout(pingTimeoutRef.current);
+          pingTimeoutRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener('message', handlePingPong);
+
+    const checkStatus = () => {
+      // Clear any existing active timeout first
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+
+      // Set timeout to wait for pong response
+      pingTimeoutRef.current = setTimeout(() => {
+        console.log('[PrivacyLens Dashboard] Ping timeout fired. hasDetectedExtension:', hasDetectedExtension.current);
+        if (hasDetectedExtension.current) {
+          setExtensionStatus('Off');
+        } else {
+          setExtensionStatus('Not Installed');
+        }
+      }, 1500);
+
+      console.log('[PrivacyLens Dashboard] Posting PingExtension to page...');
+      window.postMessage({ direction: 'from-page', type: 'PingExtension' }, '*');
+    };
+
+    const interval = setInterval(checkStatus, 5000);
+    // Initial immediate ping
+    checkStatus();
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('message', handlePingPong);
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load live data from backend on mount and listen for authoritative Chrome Extension sync
   React.useEffect(() => {
@@ -605,6 +739,7 @@ export const PrivacyProvider = ({ children }) => {
         authLoading,
         extensionStatus,
         login,
+        register,
         logout,
         websites,
         filteredWebsites,

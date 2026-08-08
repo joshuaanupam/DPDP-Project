@@ -28,27 +28,15 @@ export const Navbar = () => {
   const badge = getScoreBadge(score);
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/50 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+    <header className="sticky top-0 z-20 w-full bg-white/80 dark:bg-zinc-950/80 border-b border-beige-400/40 dark:border-zinc-800/40 backdrop-blur-md">
+      <div className="px-6">
+        <div className="flex items-center justify-between h-16">
           
-          {/* Brand Logo */}
-          <div className="flex items-center space-x-3">
-            <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25 border border-indigo-400/30">
-              <Shield className="w-6 h-6 text-slate-900" />
-              <Sparkles className="w-3.5 h-3.5 text-cyan-300 absolute -top-1 -right-1 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-heading font-extrabold text-xl tracking-tight text-slate-900">
-                  Privacy<span className="gradient-text">Lens</span>
-                </span>
-                <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  DPDP Shield
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 font-medium">Digital Footprint & Rights Control Center</p>
-            </div>
+          {/* Left: Section title */}
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-widest">
+              DPDP Compliance Monitor
+            </span>
           </div>
 
           {/* Center: Digital Privacy Score Pill */}
@@ -118,28 +106,21 @@ export const Navbar = () => {
             {/* Theme Toggle Button */}
             <button
               onClick={toggleDark}
-              className="p-2 rounded-xl glass-card text-indigo-400 hover:text-indigo-300 transition-colors"
+              className="p-2 rounded-xl bg-beige-50 border border-beige-400/40 text-beige-900 hover:bg-beige-100 dark:bg-zinc-900 dark:border-zinc-800 dark:text-beige-300 transition-colors"
               title="Toggle Theme"
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
             {/* User Profile Pill */}
-            <div className="flex items-center space-x-3 pl-3 border-l border-slate-200/50">
-              <div className="flex items-center justify-center w-9 h-9 rounded-full glass-panel border border-slate-200/50 text-indigo-400 font-semibold shadow-inner">
+            <div className="flex items-center space-x-3 pl-3 border-l border-beige-400/40 dark:border-zinc-800/40">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-beige-100 dark:bg-zinc-800 text-beige-900 dark:text-beige-300 font-bold border border-beige-400/30 text-xs">
                 {userData.name ? userData.name.charAt(0) : 'U'}
               </div>
               <div className="hidden lg:block text-left">
-                <p className="text-sm font-semibold text-slate-900 leading-tight">{userData.name || 'User'}</p>
-                <p className="text-xs text-slate-600 truncate max-w-[120px]">{userData.email || ''}</p>
+                <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{userData.name || 'User'}</p>
+                <p className="text-[10px] text-beige-800 dark:text-zinc-400 truncate max-w-[120px]">{userData.email || ''}</p>
               </div>
-              <button
-                onClick={logout}
-                className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 transition-colors"
-                title="Log Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
 
           </div>
