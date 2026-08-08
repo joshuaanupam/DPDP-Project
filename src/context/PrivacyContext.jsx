@@ -89,14 +89,12 @@ export const PrivacyProvider = ({ children }) => {
         setIsAuthenticated(true);
         setBackendActive(true);
 
-        // Sync to extension via postMessage
         window.postMessage({
           direction: 'from-page',
           type: 'SetExtensionSession',
           detail: { token: data.token, user: data.user }
         }, '*');
 
-        // Load data for the user
         await fetchDashboardData(data.user.id);
         await fetchRequests(data.user.id);
         await fetchAuditLogs(data.user.id);
@@ -114,7 +112,6 @@ export const PrivacyProvider = ({ children }) => {
     setIsAuthenticated(false);
     setUserData(initialData.user);
 
-    // Clear extension via postMessage
     window.postMessage({
       direction: 'from-page',
       type: 'ClearExtensionSession'
@@ -131,7 +128,6 @@ export const PrivacyProvider = ({ children }) => {
         setIsAuthenticated(true);
         setBackendActive(true);
 
-        // Sync to extension on successful validation to keep in sync
         window.postMessage({
           direction: 'from-page',
           type: 'SetExtensionSession',
@@ -146,10 +142,8 @@ export const PrivacyProvider = ({ children }) => {
       }
     } catch (err) {
       console.warn("Auth server offline. Simulating local session validation.");
-      // Fallback: trust token locally if offline
       setIsAuthenticated(true);
 
-      // Sync offline simulated session to extension
       window.postMessage({
         direction: 'from-page',
         type: 'SetExtensionSession',
@@ -164,111 +158,138 @@ export const PrivacyProvider = ({ children }) => {
     }
   };
 
-  // Load live data and check auth status on mount
+  const [extensionData, setExtensionData] = useState({
+    webCount: 0,
+    exposureCount: 0,
+    visitedWebsites: [],
+    exposures: {},
+    privacyScore: 100,
+    isExtensionSynced: false
+  });
+
+  const processedSyncIds = React.useRef(new Set());
+
+  // Load live data from backend on mount and listen for authoritative Chrome Extension sync
   React.useEffect(() => {
-    const token = localStorage.getItem('privacylens_token');
+    fetchDashboardData();
+    fetchRequests();
+    fetchAuditLogs();
 
-    // Listener for response from extension via postMessage
-    const handleMessage = (e) => {
-      const message = e.data;
-      if (message && message.direction === 'from-content-script') {
-        console.log('[PrivacyLens Dashboard] Received message from content script:', message);
-        if (message.type === 'ExtensionSessionResponse') {
-          // If we received any response from the extension, it is active!
-          console.log('[PrivacyLens Dashboard] Extension is Active (received session response)');
-          setExtensionStatus('Active');
-          hasDetectedExtension.current = true;
-          if (pingTimeoutRef.current) {
-            clearTimeout(pingTimeoutRef.current);
-            pingTimeoutRef.current = null;
-          }
+    const applyExtensionSync = (data) => {
+      if (!data) return;
 
-          const extensionSession = message.detail;
-          if (extensionSession && extensionSession.token) {
-            localStorage.setItem('privacylens_token', extensionSession.token);
-            validateSession(extensionSession.token);
-          } else {
-            setAuthLoading(false);
-          }
+      // Idempotency / Duplicate Event Prevention
+      if (data.eventId) {
+        if (processedSyncIds.current.has(data.eventId)) return;
+        processedSyncIds.current.add(data.eventId);
+        // Cap set size to 1000
+        if (processedSyncIds.current.size > 1000) {
+          const first = processedSyncIds.current.values().next().value;
+          processedSyncIds.current.delete(first);
         }
+      }
+
+      const extVisitedWebsites = data.visitedWebsites || [];
+      const extExposures = data.exposures || {};
+      const extVisits = data.recentWebsiteVisits || [];
+      const extWebCount = typeof data.webCount === 'number' ? data.webCount : extVisitedWebsites.length;
+      const extExposureCount = typeof data.exposureCount === 'number' ? data.exposureCount : Object.keys(extExposures).length;
+      const extScore = typeof data.privacyScore === 'number' ? data.privacyScore : 100;
+
+      setExtensionData({
+        webCount: extWebCount,
+        exposureCount: extExposureCount,
+        visitedWebsites: extVisitedWebsites,
+        exposures: extExposures,
+        privacyScore: extScore,
+        isExtensionSynced: true
+      });
+
+      // Consolidate unique non-excluded domains from extension
+      const allExtDomains = new Set([
+        ...extVisitedWebsites,
+        ...extVisits.map(v => v.domain),
+        ...Object.keys(extExposures)
+      ]);
+
+      if (allExtDomains.size > 0) {
+        setWebsites(prevWebsites => {
+          const siteMap = new Map();
+
+          // Build digital footprint grid strictly using extension tracked domains
+          allExtDomains.forEach(domainStr => {
+            if (!domainStr || domainStr === 'unknown' || domainStr.includes('google.com')) return;
+            const norm = domainStr.toLowerCase();
+            const expRecord = extExposures[norm];
+
+            siteMap.set(norm, {
+              id: `ext_site_${norm}`,
+              domain: norm,
+              name: norm.charAt(0).toUpperCase() + norm.slice(1),
+              category: norm.includes('shop') ? 'E-Commerce' : 'Tracked Web Service',
+              riskLevel: (expRecord?.riskLevel) ? expRecord.riskLevel.charAt(0).toUpperCase() + expRecord.riskLevel.slice(1) : 'Low',
+              deletionTier: 2,
+              directApiUrl: null,
+              guidedUrl: `https://${norm}`,
+              faviconUrl: `https://www.google.com/s2/favicons?domain=${norm}`,
+              dataItems: expRecord?.dataTypes || ['visited_page'],
+              activeConsents: expRecord?.consentTypes || ['essential'],
+              consents: (expRecord?.consentTypes || ['essential']).map(c => ({
+                id: `c_${Math.random()}`,
+                consentType: c,
+                status: 'ACTIVE',
+                grantedAt: new Date().toISOString()
+              })),
+              requests: []
+            });
+          });
+
+          return Array.from(siteMap.values());
+        });
       }
     };
 
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'RECLAIM_EXTENSION_SYNC') {
+        applyExtensionSync(event.data);
+      }
+    };
     window.addEventListener('message', handleMessage);
 
-    if (token) {
-      validateSession(token);
-    } else {
-      // Query extension to see if it has a session via postMessage
-      window.postMessage({ direction: 'from-page', type: 'GetExtensionSession' }, '*');
+    const handleCustomEvent = (event) => {
+      if (event.detail) {
+        applyExtensionSync(event.detail);
+      }
+    };
+    window.addEventListener('reclaim_extension_sync_event', handleCustomEvent);
 
-      // Fallback timeout to ensure dashboard shows login if extension is offline or no session
-      const timer = setTimeout(() => {
-        setAuthLoading(false);
-      }, 1000);
-      return () => {
-        clearTimeout(timer);
-        window.removeEventListener('message', handleMessage);
-      };
-    }
+    // Initial check from localStorage + request fresh sync trigger
+    try {
+      const saved = localStorage.getItem('reclaim_extension_sync');
+      if (saved) {
+        applyExtensionSync(JSON.parse(saved));
+      }
+    } catch (e) {}
+
+    window.postMessage({ type: 'REQUEST_EXTENSION_SYNC' }, '*');
+
+    const handleFocus = () => {
+      window.postMessage({ type: 'REQUEST_EXTENSION_SYNC' }, '*');
+    };
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       window.removeEventListener('message', handleMessage);
+      window.removeEventListener('reclaim_extension_sync_event', handleCustomEvent);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
-  // Heartbeat query for MV3 extension status (Installed/Enabled -> Active, Disabled -> Off, Not Installed -> Not Installed)
-  React.useEffect(() => {
-    const handlePingPong = (e) => {
-      const message = e.data;
-      if (message && message.direction === 'from-content-script' && message.type === 'PongExtension') {
-        console.log('[PrivacyLens Dashboard] Received PongExtension from content script');
-        setExtensionStatus('Active');
-        hasDetectedExtension.current = true;
-        if (pingTimeoutRef.current) {
-          clearTimeout(pingTimeoutRef.current);
-          pingTimeoutRef.current = null;
-        }
-      }
-    };
-
-    window.addEventListener('message', handlePingPong);
-
-    const checkStatus = () => {
-      // Clear any existing active timeout first
-      if (pingTimeoutRef.current) {
-        clearTimeout(pingTimeoutRef.current);
-      }
-
-      // Set timeout to wait for pong response
-      pingTimeoutRef.current = setTimeout(() => {
-        console.log('[PrivacyLens Dashboard] Ping timeout fired. hasDetectedExtension:', hasDetectedExtension.current);
-        if (hasDetectedExtension.current) {
-          setExtensionStatus('Off');
-        } else {
-          setExtensionStatus('Not Installed');
-        }
-      }, 1500);
-
-      console.log('[PrivacyLens Dashboard] Posting PingExtension to page...');
-      window.postMessage({ direction: 'from-page', type: 'PingExtension' }, '*');
-    };
-
-    const interval = setInterval(checkStatus, 5000);
-    // Initial immediate ping
-    checkStatus();
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('message', handlePingPong);
-      if (pingTimeoutRef.current) {
-        clearTimeout(pingTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Recalculate dynamic privacy score (local state calculation or fallback)
+  // Calculate local privacy score fallback if Extension sync not active
   const privacyScore = useMemo(() => {
+    if (extensionData.isExtensionSynced) {
+      return extensionData.privacyScore;
+    }
     if (backendActive) {
       return userData.privacyScore || 100;
     }
@@ -276,42 +297,38 @@ export const PrivacyProvider = ({ children }) => {
     websites.forEach(site => {
       if (site.riskLevel === 'High') score -= 10;
       if (site.riskLevel === 'Medium') score -= 5;
-
-      site.consents.forEach(consent => {
-        if (consent.status === 'ACTIVE' && (
-          consent.consentType.toLowerCase().includes('marketing') ||
-          consent.consentType.toLowerCase().includes('sharing') ||
-          consent.consentType.toLowerCase().includes('tracking') ||
-          consent.consentType.toLowerCase().includes('ad')
-        )) {
-          score -= 5;
-        }
-        if (consent.status === 'REVOKED') {
-          score += 3;
-        }
-      });
     });
     return Math.min(100, Math.max(10, score));
-  }, [websites, userData, backendActive]);
+  }, [websites, userData, backendActive, extensionData]);
 
-  // Overall Stats
+  // Authoritative Overall Stats (Extension = Single Source of Truth)
   const stats = useMemo(() => {
+    const totalWebsites = extensionData.isExtensionSynced ? extensionData.webCount : websites.length;
+    const activeScore = extensionData.isExtensionSynced ? extensionData.privacyScore : privacyScore;
+
     let activeConsentsCount = 0;
-    websites.forEach(site => {
-      site.consents.forEach(c => {
-        if (c.status === 'ACTIVE') activeConsentsCount++;
+    if (extensionData.isExtensionSynced) {
+      Object.values(extensionData.exposures).forEach(exp => {
+        activeConsentsCount += (exp.consentTypes || []).length;
       });
-    });
+    } else {
+      websites.forEach(site => {
+        (site.consents || []).forEach(c => {
+          if (c.status === 'ACTIVE') activeConsentsCount++;
+        });
+      });
+    }
 
     const pendingRequestsCount = requests.filter(r => r.status !== 'COMPLETED').length;
 
     return {
-      totalWebsites: websites.length,
+      totalWebsites: totalWebsites,
+      exposureCount: extensionData.exposureCount,
       activeConsents: activeConsentsCount,
       pendingRequests: pendingRequestsCount,
-      privacyScore: privacyScore
+      privacyScore: activeScore
     };
-  }, [websites, requests, privacyScore]);
+  }, [websites, requests, privacyScore, extensionData]);
 
   // Filtered websites
   const filteredWebsites = useMemo(() => {

@@ -160,6 +160,113 @@ function detectBehavioralTracking() {
 }
 
 /**
+ * Detects if a form is a registration / signup form (as opposed to a login form).
+ * Uses ONLY safe DOM metadata (button labels, headings, form attributes).
+ * NEVER reads input values, passwords, or PII.
+ */
+function isRegistrationForm(form) {
+  if (!form) return false;
+
+  const action = (form.action || '').toLowerCase();
+  const id = (form.id || '').toLowerCase();
+  const className = (form.className || '').toLowerCase();
+  
+  // Check buttons
+  const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]'));
+  const buttonText = buttons.map(b => (b.innerText || b.value || '').toLowerCase()).join(' ');
+
+  // Form inner text summary (top 300 chars only)
+  const formSummary = (form.innerText || '').substring(0, 300).toLowerCase();
+
+  const fullStr = `${action} ${id} ${className} ${buttonText} ${formSummary}`;
+
+  // Explicit login-only check (e.g. Sign in, Log in without signup keywords)
+  const isLoginPattern = (fullStr.includes('login') || fullStr.includes('log in') || fullStr.includes('signin') || fullStr.includes('sign in')) &&
+                         !(fullStr.includes('signup') || fullStr.includes('sign up') || fullStr.includes('register') || fullStr.includes('create account') || fullStr.includes('create your account') || fullStr.includes('join'));
+
+  if (isLoginPattern) return false;
+
+  // Registration keywords
+  const regKeywords = [
+    'signup', 'sign up', 'sign-up', 'register', 'registration',
+    'create account', 'create your account', 'create-account',
+    'join now', 'get started', 'new account', 'register.php', 'signup.html'
+  ];
+
+  const hasRegKeyword = regKeywords.some(kw => fullStr.includes(kw));
+
+  // Input attributes check (confirm password, terms, first_name)
+  const inputs = Array.from(form.querySelectorAll('input'));
+  const inputAttributes = inputs.map(i => `${i.name || ''} ${i.id || ''} ${i.placeholder || ''}`.toLowerCase()).join(' ');
+  const hasRegInputs = inputAttributes.includes('confirm') || inputAttributes.includes('first_name') || inputAttributes.includes('last_name') || inputAttributes.includes('terms') || inputAttributes.includes('agree');
+
+  return hasRegKeyword || hasRegInputs;
+}
+
+/**
+ * Checks for successful registration confirmation signals (URL path or DOM confirmation message).
+ */
+function checkForRegistrationConfirmation() {
+  try {
+    const rawPending = sessionStorage.getItem('reclaim_pending_registration');
+    if (!rawPending) return;
+
+    const pending = JSON.parse(rawPending);
+    const now = Date.now();
+
+    // Expire pending registration after 2 minutes
+    if (now - pending.timestamp > 120000) {
+      sessionStorage.removeItem('reclaim_pending_registration');
+      return;
+    }
+
+    const domain = normalizeDomain(window.location.hostname);
+    if (domain !== pending.domain) return;
+
+    // Check 1: Confirmation URL paths
+    const href = window.location.href.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+    const isConfirmationUrl = [
+      '/welcome', '/dashboard', '/account-created', '/signup-success',
+      '/verify-email', '/confirm', '/getting-started', '/onboarding',
+      '/home', '/success', '/account', '/registered'
+    ].some(p => path.includes(p) || href.includes(p));
+
+    // Check 2: DOM confirmation messages
+    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().substring(0, 2000);
+    const isConfirmationText = [
+      'account created', 'registration successful', 'welcome to',
+      'check your email', 'verification link', 'verification email sent',
+      'account setup complete', 'successfully registered', 'welcome aboard',
+      'thanks for registering', 'thanks for signing up', 'thank you for signing up',
+      'account has been created', 'your account is ready'
+    ].some(kw => bodyText.includes(kw));
+
+    // Check 3: Post-submit navigation (different page or clean redirect after submission)
+    const isPostSubmitNav = (document.referrer && document.referrer !== window.location.href && !href.includes('signup') && !href.includes('register'));
+
+    if (isConfirmationUrl || isConfirmationText || isPostSubmitNav) {
+      // Clear pending token so it fires ONLY ONCE
+      sessionStorage.removeItem('reclaim_pending_registration');
+
+      const sessionConfirmedKey = 'reclaim_confirmed_reg_' + pending.eventId;
+      if (sessionStorage.getItem(sessionConfirmedKey)) return;
+      sessionStorage.setItem(sessionConfirmedKey, '1');
+
+      // Send ACCOUNT_CREATED event to service worker
+      chrome.runtime.sendMessage({
+        type: 'ACCOUNT_CREATED',
+        domain: domain,
+        eventId: pending.eventId,
+        timestamp: new Date().toISOString(),
+        url: window.location.href,
+        confirmationSignal: isConfirmationText ? 'DOM_TEXT' : (isConfirmationUrl ? 'URL_PATH' : 'NAVIGATION')
+      }).catch(() => {});
+    }
+  } catch (err) {}
+}
+
+/**
  * Intercepts form submission and sends sanitized exposure metadata only.
  */
 function handleFormSubmit(form) {
@@ -167,6 +274,18 @@ function handleFormSubmit(form) {
 
   const dataTypes = detectDataCategories(inputs);
   const consents = detectConsentCategories(inputs);
+
+  // Registration flow detection - sets pending token if registration form
+  if (isRegistrationForm(form)) {
+    const regToken = {
+      domain: normalizeDomain(window.location.hostname),
+      timestamp: Date.now(),
+      eventId: 'reg_' + Math.random().toString(36).substring(2, 11)
+    };
+    try {
+      sessionStorage.setItem('reclaim_pending_registration', JSON.stringify(regToken));
+    } catch (e) {}
+  }
 
   // Send payload only if relevant exposure data types or consents were detected
   if (dataTypes.length > 0 || consents.length > 0) {
@@ -210,6 +329,10 @@ document.addEventListener('submit', (e) => {
     }
   }
 }, true);
+
+// Check for registration confirmation on load and SPA navigation
+checkForRegistrationConfirmation();
+window.addEventListener('load', checkForRegistrationConfirmation);
 
 // Passively notify background script of website page navigation (for Recent Website Activity tracking)
 if (window.location.protocol.startsWith('http')) {
@@ -711,11 +834,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   }
 
-  function renderExposureOverview(shadow, exposures) {
+  function renderExposureOverview(shadow, exposures, storageData) {
     const records = Object.values(exposures || {});
 
-    const totalWebsites = records.length;
-    const totalExposures = records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
+    const visitedWebsites = (storageData && storageData.visitedWebsites) || [];
+    const totalWebsites = (storageData && typeof storageData.webCount === 'number')
+      ? storageData.webCount
+      : (visitedWebsites.length || Object.keys(exposures || {}).length);
+
+    const exposureCount = (storageData && typeof storageData.exposureCount === 'number')
+      ? storageData.exposureCount
+      : records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
     const highRiskCount = records.filter(r => r.riskLevel === 'high').length;
 
     const statWebsites = shadow.getElementById('stat-websites');
@@ -724,7 +853,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const scoreBadge = shadow.getElementById('privacy-score-badge');
 
     if (statWebsites) statWebsites.textContent = totalWebsites;
-    if (statAccounts) statAccounts.textContent = totalExposures;
+    if (statAccounts) statAccounts.textContent = exposureCount;
     if (statHighRisk) statHighRisk.textContent = highRiskCount;
 
     // Calculate and update score
@@ -788,21 +917,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   function refreshOverlayUI() {
     if (!_shadowRef) return;
 
-    chrome.runtime.sendMessage({ type: 'GET_SITE_DATA', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
+    chrome.runtime.sendMessage({ type: 'GET_EXTENSION_STATE', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
       if (chrome.runtime.lastError || !_shadowRef) return;
 
       const siteData = response || {};
       const allExposures = siteData.exposures || {};
       const isDemo = siteData.demoMode || false;
 
-      // Get recent visits from storage (same as popup.js)
-      chrome.storage.local.get(['recentWebsiteVisits'], (storage) => {
-        if (chrome.runtime.lastError || !_shadowRef) return;
-
-        let visits = storage.recentWebsiteVisits || [];
-        if (!isDemo) {
-          visits = visits.filter(v => !v.isDemo);
-        }
+      let visits = siteData.recentWebsiteVisits || [];
+      if (!isDemo) {
+        visits = visits.filter(v => !v.isDemo);
+      }
 
         // Active Tab State Machine — using window.location (content script knows the page)
         const activeTabState = {
@@ -842,13 +967,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Render Overall Overview Metrics & Privacy Score
-        renderExposureOverview(_shadowRef, allExposures);
+        renderExposureOverview(_shadowRef, allExposures, siteData);
 
         // Render Recent Website Activity List
         renderRecentVisits(_shadowRef, visits);
-      });
+
+        // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
+        if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) {
+          const syncPayload = {
+            type: 'RECLAIM_EXTENSION_SYNC',
+            eventId: 'sync_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            timestamp: new Date().toISOString(),
+            webCount: siteData.webCount || 0,
+            exposureCount: siteData.exposureCount || 0,
+            visitedWebsites: siteData.visitedWebsites || [],
+            exposures: siteData.exposures || {},
+            recentWebsiteVisits: visits || [],
+            privacyScore: calculatePrivacyScore(siteData.exposures),
+            childSafeMode: isChildSafe,
+            isExtensionActive: true
+          };
+          try {
+            window.postMessage(syncPayload, '*');
+            window.localStorage.setItem('reclaim_extension_sync', JSON.stringify(syncPayload));
+            window.dispatchEvent(new CustomEvent('reclaim_extension_sync_event', { detail: syncPayload }));
+          } catch (e) {}
+        }
     });
   }
+
+  // Listen for explicit Dashboard sync requests
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'REQUEST_EXTENSION_SYNC') {
+      refreshOverlayUI();
+    }
+  });
 
   // -------------------------------------------------------
   // Overlay injection
