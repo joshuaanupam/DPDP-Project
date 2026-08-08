@@ -2,7 +2,7 @@ import React from 'react';
 import { Globe, Shield, Clock, ShieldAlert, Sparkles, TrendingUp, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
 
-export const OverviewStats = () => {
+export const OverviewStats = ({ setActiveTab }) => {
   const { stats } = usePrivacy();
 
   const getScoreColor = (score) => {
@@ -16,13 +16,16 @@ export const OverviewStats = () => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
       
-      {/* Stat 1: Connected Websites */}
-      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group">
+      {/* Stat 1: Digital Footprint Overview (clickable) */}
+      <button
+        onClick={() => setActiveTab && setActiveTab('FOOTPRINT')}
+        className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group cursor-pointer hover:ring-2 hover:ring-beige-900/30 dark:hover:ring-beige-300/30 transition-all text-left w-full"
+      >
         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
           <Globe className="w-20 h-20 text-beige-900 dark:text-white" />
         </div>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Connected Sites</span>
+          <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Digital Footprint Overview</span>
           <div className="p-2 rounded-md bg-beige-100 border border-beige-400/30 text-beige-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-beige-300">
             <Globe className="w-4 h-4" />
           </div>
@@ -33,11 +36,11 @@ export const OverviewStats = () => {
         </div>
         <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 flex items-center justify-between text-[10px]">
           <span className="text-beige-800 dark:text-zinc-400 flex items-center">
-            <Sparkles className="w-3 h-3 mr-1 text-beige-900 dark:text-beige-300" /> MV3 Passive Sync
+            <Sparkles className="w-3 h-3 mr-1 text-beige-900 dark:text-beige-300" /> Click to View
           </span>
-          <span className="text-beige-900 dark:text-beige-300 font-bold">Active</span>
+          <span className="text-beige-900 dark:text-beige-300 font-bold flex items-center gap-1"><ArrowUpRight className="w-3 h-3" /> Open</span>
         </div>
-      </div>
+      </button>
 
       {/* Stat 2: Active Consents */}
       <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group">

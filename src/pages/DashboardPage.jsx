@@ -61,7 +61,7 @@ export const DashboardPage = () => {
           </div>
 
           {/* Overview Stat Cards */}
-          <OverviewStats />
+          <OverviewStats setActiveTab={setActiveTab} />
 
           {/* Dynamic Tab Content */}
           <div className="grid grid-cols-1 gap-6">
