@@ -172,8 +172,10 @@ export const PrivacyProvider = ({ children }) => {
     const handleMessage = (e) => {
       const message = e.data;
       if (message && message.direction === 'from-content-script') {
+        console.log('[PrivacyLens Dashboard] Received message from content script:', message);
         if (message.type === 'ExtensionSessionResponse') {
           // If we received any response from the extension, it is active!
+          console.log('[PrivacyLens Dashboard] Extension is Active (received session response)');
           setExtensionStatus('Active');
           hasDetectedExtension.current = true;
           if (pingTimeoutRef.current) {
@@ -220,6 +222,7 @@ export const PrivacyProvider = ({ children }) => {
     const handlePingPong = (e) => {
       const message = e.data;
       if (message && message.direction === 'from-content-script' && message.type === 'PongExtension') {
+        console.log('[PrivacyLens Dashboard] Received PongExtension from content script');
         setExtensionStatus('Active');
         hasDetectedExtension.current = true;
         if (pingTimeoutRef.current) {
@@ -239,6 +242,7 @@ export const PrivacyProvider = ({ children }) => {
 
       // Set timeout to wait for pong response
       pingTimeoutRef.current = setTimeout(() => {
+        console.log('[PrivacyLens Dashboard] Ping timeout fired. hasDetectedExtension:', hasDetectedExtension.current);
         if (hasDetectedExtension.current) {
           setExtensionStatus('Off');
         } else {
@@ -246,6 +250,7 @@ export const PrivacyProvider = ({ children }) => {
         }
       }, 1500);
 
+      console.log('[PrivacyLens Dashboard] Posting PingExtension to page...');
       window.postMessage({ direction: 'from-page', type: 'PingExtension' }, '*');
     };
 

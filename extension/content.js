@@ -1014,11 +1014,16 @@ function checkIsDashboard() {
 window.addEventListener('message', async (event) => {
   const message = event.data;
   if (message && message.direction === 'from-page') {
-    if (!checkIsDashboard()) return;
+    console.log('[RECLAIM Content Script] Received message from page:', message);
+    if (!checkIsDashboard()) {
+      console.log('[RECLAIM Content Script] checkIsDashboard failed for:', window.location.href);
+      return;
+    }
 
     if (message.type === 'GetExtensionSession') {
       try {
         const data = await chrome.storage.local.get(['session']);
+        console.log('[RECLAIM Content Script] Sending ExtensionSessionResponse:', data.session);
         window.postMessage({
           direction: 'from-content-script',
           type: 'ExtensionSessionResponse',
@@ -1030,6 +1035,7 @@ window.addEventListener('message', async (event) => {
     } else if (message.type === 'SetExtensionSession') {
       try {
         if (message.detail) {
+          console.log('[RECLAIM Content Script] Saving session to storage:', message.detail);
           await chrome.storage.local.set({ session: message.detail });
         }
       } catch (err) {
@@ -1037,11 +1043,13 @@ window.addEventListener('message', async (event) => {
       }
     } else if (message.type === 'ClearExtensionSession') {
       try {
+        console.log('[RECLAIM Content Script] Clearing session from storage');
         await chrome.storage.local.remove(['session']);
       } catch (err) {
         console.error('Failed to clear session in extension:', err);
       }
     } else if (message.type === 'PingExtension') {
+      console.log('[RECLAIM Content Script] Received PingExtension, replying with PongExtension...');
       window.postMessage({
         direction: 'from-content-script',
         type: 'PongExtension'
