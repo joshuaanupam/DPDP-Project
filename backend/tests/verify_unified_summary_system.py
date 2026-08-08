@@ -90,8 +90,8 @@ def test_unified_system():
     # Must NOT say "This is an online shopping platform" or "This is a gaming website"
     bullets_text = " ".join(unknown_res['bullets']).lower()
     assert "online shopping platform" not in bullets_text, "ERROR: Generic category template generated!"
-    assert "verified website information unavailable" in bullets_text or unknown_res["success"] == False, "Expected unavailable message for unknown site"
-    print("SUCCESS: Unknown website strictly returned unavailable message without guessing!")
+    assert "xyz-unknown-gaming-random-site" in bullets_text or "verified website information unavailable" in bullets_text, "Expected domain-specific summary"
+    print("SUCCESS: Unknown website generated domain-specific summary without category guessing!")
 
     # ----------------------------------------------------
     # TEST 5: Tracked E-Commerce vs Gaming (Epic Games Store)
@@ -110,6 +110,21 @@ def test_unified_system():
     assert "shopease" in shop_res["bullets"][0].lower() or "e-commerce" in shop_res["bullets"][0].lower()
     print("SUCCESS: ShopEase E-Commerce Summary Verified:")
     for b in shop_res["bullets"]:
+        print(f"   {b}")
+
+    print("\n[TEST 7] Testing NetMirror (net77.cc & netmirror.gg)...")
+    net77_res = post_summary("net77.cc", "EN", "NetMirror")
+    assert net77_res["websiteId"] == "net77.cc"
+    assert "netmirror" in net77_res["bullets"][0].lower() or "streaming" in net77_res["bullets"][0].lower()
+    print("SUCCESS: net77.cc English Streaming Summary Verified:")
+    for b in net77_res["bullets"]:
+        print(f"   {b}")
+
+    netmirror_res = post_summary("netmirror.gg", "EN", "NetMirror")
+    assert netmirror_res["websiteId"] == "netmirror.gg"
+    assert "netmirror" in netmirror_res["bullets"][0].lower() or "streaming" in netmirror_res["bullets"][0].lower()
+    print("SUCCESS: netmirror.gg English Streaming Summary Verified:")
+    for b in netmirror_res["bullets"]:
         print(f"   {b}")
 
     print("\n==================================================")
