@@ -1,0 +1,84 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String           @id @default(uuid())
+  name         String
+  email        String           @unique
+  passwordHash String
+  privacyScore Int              @default(85)
+  createdAt    DateTime         @default(now())
+  dataItems    DataItem[]
+  consents     Consent[]
+  requests     PrivacyRequest[]
+  auditLogs    AuditLog[]
+}
+
+model Website {
+  id           String           @id @default(uuid())
+  domain       String           @unique
+  name         String
+  category     String           @default("General")
+  riskLevel    String           @default("Medium") // Low, Medium, High
+  faviconUrl   String?
+  deletionTier Int              @default(2) // 1: Direct API, 2: Guided URL, 3: Letter
+  directApiUrl String?
+  guidedUrl    String?
+  dataItems    DataItem[]
+  consents     Consent[]
+  requests     PrivacyRequest[]
+  auditLogs    AuditLog[]
+}
+
+model DataItem {
+  id         String   @id @default(uuid())
+  userId     String
+  websiteId  String
+  dataType   String   // Email, Phone, Name, Location
+  detectedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website    Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model Consent {
+  id          String    @id @default(uuid())
+  userId      String
+  websiteId   String
+  consentType String    // Account Creation, Marketing Emails, 3rd-Party Ads
+  status      String    @default("ACTIVE") // ACTIVE, REVOKED
+  grantedAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website     Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model PrivacyRequest {
+  id          String   @id @default(uuid())
+  userId      String
+  websiteId   String
+  requestType String   // CONSENT_REVOCATION, DATA_ERASURE, ACCOUNT_DELETION
+  status      String   @default("SUBMITTED") // SUBMITTED, AWAITING_RESPONSE, COMPLETED
+  methodUsed  String   // TIER1_DIRECT_API, TIER2_GUIDED, TIER3_GENERATED_NOTICE
+  requestText String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website     Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  websiteId   String
+  action      String   // EVENT_DETECTED, CONSENT_REVOKED, DELETION_REQUESTED
+  description String
+  timestamp   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website     Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
