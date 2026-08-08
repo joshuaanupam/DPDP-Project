@@ -46,7 +46,7 @@ export const DigitalFootprintGrid = () => {
   };
 
   return (
-    <div className="mb-6 bg-white dark:bg-zinc-900/60 rounded-xl p-4 border border-beige-400 dark:border-zinc-800 shadow-sm">
+    <div className="w-full">
       
       {/* Controls bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-end gap-3 mb-4">

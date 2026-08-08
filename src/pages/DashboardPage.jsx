@@ -61,11 +61,10 @@ export const DashboardPage = () => {
           </div>
 
           {/* Overview Stat Cards */}
-          <OverviewStats setActiveTab={setActiveTab} />
+          <OverviewStats activeTab={activeTab} setActiveTab={setActiveTab} />
 
           {/* Dynamic Tab Content */}
           <div id="dynamic-tab-content" className="grid grid-cols-1 gap-6">
-            {activeTab === 'FOOTPRINT' && <DigitalFootprintGrid />}
             {activeTab === 'TRACKER' && <RequestTracker />}
             {activeTab === 'AUDIT' && <AuditLogTimeline />}
             {activeTab === 'NOMINATION' && <NominationForm />}
