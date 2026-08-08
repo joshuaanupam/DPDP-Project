@@ -73,12 +73,12 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto glass-panel rounded-3xl border border-violet-500/40 shadow-2xl shadow-violet-500/20 p-6 sm:p-8 text-left">
         
         <button
           onClick={closeModal}
-          className="absolute top-6 right-6 p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-white"
+          className="absolute top-6 right-6 p-2 rounded-xl glass-card text-slate-600 hover:text-slate-900"
         >
           <X className="w-5 h-5" />
         </button>
@@ -89,7 +89,7 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
             <FileText className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold font-heading text-white">Tier 3 — DPDP Legal Notice Generator</h2>
+            <h2 className="text-xl font-bold font-heading text-slate-900">Tier 3 — DPDP Legal Notice Generator</h2>
             <p className="text-xs text-violet-300">Statutory Notice Generator for DPDP Act 2023 §6 & §12</p>
           </div>
         </div>
@@ -97,7 +97,7 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
         {/* Options Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Select DPDP Statutory Right</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Select DPDP Statutory Right</label>
             <select
               value={requestType}
               onChange={(e) => setRequestType(e.target.value)}
@@ -109,7 +109,7 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Specific Instruction / Note</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Specific Instruction / Note</label>
             <input
               type="text"
               value={customReason}
@@ -123,26 +123,26 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
         {/* Generated Letter Preview Box */}
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-300 flex items-center">
+            <span className="text-xs font-bold text-slate-700 flex items-center">
               <Sparkles className="w-3.5 h-3.5 mr-1 text-violet-400" /> Formatted DPDP Legal Notice Preview
             </span>
-            <span className="text-[11px] text-slate-400 font-mono">Recipient: privacy@{site.domain}</span>
+            <span className="text-[11px] text-slate-600 font-mono">Recipient: privacy@{site.domain}</span>
           </div>
 
           <textarea
             readOnly
             value={letterText}
             rows={10}
-            className="w-full p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs font-mono text-slate-300 focus:outline-none resize-none leading-relaxed select-all"
+            className="w-full p-4 rounded-2xl glass-panel border border-slate-200/50 text-xs font-mono text-slate-700 focus:outline-none resize-none leading-relaxed select-all"
           />
         </div>
 
         {/* Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200/50">
           <div className="flex items-center space-x-2">
             <button
               onClick={handleCopy}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-all flex items-center space-x-1.5 border border-slate-700"
+              className="px-3.5 py-2 rounded-xl glass-panel hover:bg-slate-100 text-slate-800 font-semibold text-xs transition-all flex items-center space-x-1.5 border border-slate-200/50"
             >
               <Copy className="w-3.5 h-3.5 text-violet-400" />
               <span>{copied ? 'Copied to Clipboard!' : 'Copy Letter'}</span>
@@ -159,7 +159,7 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
 
           <button
             onClick={handleSubmitRequest}
-            className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-lg shadow-violet-600/30 transition-all flex items-center space-x-2"
+            className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-slate-900 font-bold text-xs shadow-lg shadow-violet-600/30 transition-all flex items-center space-x-2"
           >
             <Send className="w-4 h-4" />
             <span>Submit Request & Track Proof</span>

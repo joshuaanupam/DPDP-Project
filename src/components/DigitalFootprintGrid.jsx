@@ -23,7 +23,7 @@ export const DigitalFootprintGrid = () => {
       case 'Low':
         return { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', label: 'Low Risk' };
       default:
-        return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400', label: risk };
+        return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-600', label: risk };
     }
   };
 
@@ -36,7 +36,7 @@ export const DigitalFootprintGrid = () => {
       case 3:
         return { bg: 'bg-violet-500/10', border: 'border-violet-500/30', text: 'text-violet-400', icon: FileText, label: 'Tier 3: Legal Notice' };
       default:
-        return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400', icon: FileText, label: `Tier ${tier}` };
+        return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-600', icon: FileText, label: `Tier ${tier}` };
     }
   };
 
@@ -46,13 +46,13 @@ export const DigitalFootprintGrid = () => {
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold font-heading text-white flex items-center">
+          <h2 className="text-2xl font-bold font-heading text-slate-900 flex items-center">
             Digital Footprint Overview
             <span className="ml-3 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
               {filteredWebsites.length} Tracked Sites
             </span>
           </h2>
-          <p className="text-sm text-slate-400">Discover shared personal data, active consents, and 3-Tier DPDP action paths.</p>
+          <p className="text-sm text-slate-600">Discover shared personal data, active consents, and 3-Tier DPDP action paths.</p>
         </div>
 
         {/* Search & Filter Controls */}
@@ -60,7 +60,7 @@ export const DigitalFootprintGrid = () => {
           
           {/* Search Input */}
           <div className="relative flex-1 min-w-[200px] sm:w-64">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 transform -translate-y-1/2 text-slate-600" />
             <input
               type="text"
               value={searchQuery}
@@ -72,13 +72,13 @@ export const DigitalFootprintGrid = () => {
 
           {/* Risk Level Filter Dropdown */}
           <div className="flex items-center space-x-1 glass-panel p-1 rounded-xl">
-            <Filter className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
+            <Filter className="w-3.5 h-3.5 text-slate-600 ml-2 mr-1" />
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="bg-transparent text-xs font-medium text-slate-300 focus:outline-none cursor-pointer pr-2"
+              className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none cursor-pointer pr-2"
             >
-              <option value="ALL" className="bg-[#131B2E] text-slate-200">All Risks</option>
+              <option value="ALL" className="bg-[#131B2E] text-slate-800">All Risks</option>
               <option value="High" className="bg-[#131B2E] text-rose-400">High Risk</option>
               <option value="Medium" className="bg-[#131B2E] text-amber-400">Medium Risk</option>
               <option value="Low" className="bg-[#131B2E] text-emerald-400">Low Risk</option>
@@ -90,9 +90,9 @@ export const DigitalFootprintGrid = () => {
             <select
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value)}
-              className="bg-transparent text-xs font-medium text-slate-300 focus:outline-none cursor-pointer pr-2"
+              className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none cursor-pointer pr-2"
             >
-              <option value="ALL" className="bg-[#131B2E] text-slate-200">All Tiers</option>
+              <option value="ALL" className="bg-[#131B2E] text-slate-800">All Tiers</option>
               <option value="1" className="bg-[#131B2E] text-indigo-400">Tier 1: Direct API</option>
               <option value="2" className="bg-[#131B2E] text-cyan-400">Tier 2: Guided URL</option>
               <option value="3" className="bg-[#131B2E] text-violet-400">Tier 3: Legal Notice</option>
@@ -104,9 +104,9 @@ export const DigitalFootprintGrid = () => {
 
       {/* Footprint Grid */}
       {filteredWebsites.length === 0 ? (
-        <div className="glass-panel rounded-2xl p-12 text-center border border-dashed border-slate-800">
+        <div className="glass-panel rounded-2xl p-12 text-center border border-dashed border-slate-200/50">
           <AlertCircle className="w-12 h-12 text-slate-500 mx-auto mb-3" />
-          <h3 className="text-lg font-bold text-slate-300">No Tracked Websites Found</h3>
+          <h3 className="text-lg font-bold text-slate-700">No Tracked Websites Found</h3>
           <p className="text-sm text-slate-500 mt-1">Try adjusting your search criteria or filter options.</p>
         </div>
       ) : (
@@ -121,20 +121,20 @@ export const DigitalFootprintGrid = () => {
             return (
               <div
                 key={site.id}
-                className="glass-card rounded-2xl p-6 flex flex-col justify-between relative group border border-slate-800/80"
+                className="glass-card rounded-2xl p-6 flex flex-col justify-between relative group border border-slate-200/50"
               >
                 <div>
                   {/* Top Bar: Icon, Name & Badges */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-center text-2xl shadow-inner">
+                      <div className="w-12 h-12 rounded-2xl glass-panel/90 border border-slate-200/50/80 flex items-center justify-center text-2xl shadow-inner">
                         {site.favicon || site.name.charAt(0)}
                       </div>
                       <div>
-                        <h3 className="font-bold text-base text-white font-heading group-hover:text-indigo-400 transition-colors">
+                        <h3 className="font-bold text-base text-slate-900 font-heading group-hover:text-indigo-400 transition-colors">
                           {site.name}
                         </h3>
-                        <p className="text-xs text-slate-400 font-mono">{site.domain}</p>
+                        <p className="text-xs text-slate-600 font-mono">{site.domain}</p>
                       </div>
                     </div>
 
@@ -144,8 +144,8 @@ export const DigitalFootprintGrid = () => {
                   </div>
 
                   {/* Tier Badge & Category */}
-                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/80 text-xs">
-                    <span className="text-slate-400 font-medium">{site.category}</span>
+                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/50 text-xs">
+                    <span className="text-slate-600 font-medium">{site.category}</span>
                     <span className={`flex items-center space-x-1 font-semibold px-2 py-0.5 rounded border ${tier.border} ${tier.bg} ${tier.text}`}>
                       <TierIcon className="w-3 h-3 mr-1" />
                       {tier.label}
@@ -154,14 +154,14 @@ export const DigitalFootprintGrid = () => {
 
                   {/* Shared Personal Data Items */}
                   <div className="mb-4">
-                    <p className="text-xs font-medium text-slate-400 mb-2 flex items-center">
+                    <p className="text-xs font-medium text-slate-600 mb-2 flex items-center">
                       <Eye className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Shared Data Fields:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {site.dataItems.map((item, idx) => (
                         <span
                           key={idx}
-                          className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-800/80 text-slate-300 border border-slate-700/50"
+                          className="text-[11px] font-medium px-2 py-0.5 rounded-md glass-card text-slate-700 border border-slate-200/50"
                         >
                           {item}
                         </span>
@@ -172,10 +172,10 @@ export const DigitalFootprintGrid = () => {
                   {/* Active Consents */}
                   <div className="mb-5">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-slate-400 font-medium">Active Permissions</span>
+                      <span className="text-slate-600 font-medium">Active Permissions</span>
                       <span className="text-amber-400 font-bold">{activeConsentsCount} active</span>
                     </div>
-                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full glass-panel rounded-full h-1.5 overflow-hidden">
                       <div
                         className="bg-amber-400 h-1.5 rounded-full"
                         style={{ width: `${Math.min(100, (activeConsentsCount / site.consents.length) * 100)}%` }}
@@ -187,7 +187,7 @@ export const DigitalFootprintGrid = () => {
                 {/* Inspect Action Trigger */}
                 <button
                   onClick={() => openDetailModal(site)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-indigo-600/90 text-slate-200 hover:text-white font-semibold text-xs transition-all duration-200 flex items-center justify-center space-x-2 border border-slate-700/80 hover:border-indigo-500/50 group-hover:shadow-lg group-hover:shadow-indigo-500/10"
+                  className="w-full py-2.5 px-4 rounded-xl glass-card hover:bg-indigo-600/90 text-slate-800 hover:text-slate-900 font-semibold text-xs transition-all duration-200 flex items-center justify-center space-x-2 border border-slate-200/50/80 hover:border-indigo-500/50 group-hover:shadow-lg group-hover:shadow-indigo-500/10"
                 >
                   <span>Inspect Data & Controls</span>
                   <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />

@@ -7,6 +7,7 @@ const dashboardController = require('./controllers/dashboardController');
 const requestController = require('./controllers/requestController');
 const auditController = require('./controllers/auditController');
 const websiteController = require('./controllers/websiteController');
+const aiController = require('./controllers/aiController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -59,6 +60,9 @@ app.post('/api/demo/reset', async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to reset database', error: err.message });
   }
 });
+
+// AI Policy Summarizer
+app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
