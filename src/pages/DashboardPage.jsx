@@ -64,7 +64,7 @@ export const DashboardPage = () => {
           <OverviewStats setActiveTab={setActiveTab} />
 
           {/* Dynamic Tab Content */}
-          <div className="grid grid-cols-1 gap-6">
+          <div id="dynamic-tab-content" className="grid grid-cols-1 gap-6">
             {activeTab === 'FOOTPRINT' && <DigitalFootprintGrid />}
             {activeTab === 'TRACKER' && <RequestTracker />}
             {activeTab === 'AUDIT' && <AuditLogTimeline />}

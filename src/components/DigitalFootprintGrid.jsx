@@ -14,8 +14,6 @@ export const DigitalFootprintGrid = () => {
     openDetailModal
   } = usePrivacy();
 
-  const [isExpanded, setIsExpanded] = React.useState(false);
-
   // Only show websites that actually have shared/provided data items
   const websitesWithDetails = React.useMemo(() => {
     return filteredWebsites.filter(site => site.dataItems && site.dataItems.length > 0);
@@ -50,39 +48,8 @@ export const DigitalFootprintGrid = () => {
   return (
     <div className="mb-6 bg-white dark:bg-zinc-900/60 rounded-xl p-4 border border-beige-400 dark:border-zinc-800 shadow-sm">
       
-      {/* Clickable Header Section */}
-      <div 
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center justify-between cursor-pointer py-1 group select-none transition-colors"
-      >
-        <div>
-          <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white flex items-center">
-            Digital Footprint Overview
-            <span className="ml-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-beige-100 dark:bg-zinc-800 text-beige-700 dark:text-beige-300 border border-beige-400/30">
-              {websitesWithDetails.length} Tracked Sites
-            </span>
-          </h2>
-          <p className="text-xs text-beige-800 dark:text-zinc-400 mt-0.5">Discover shared personal data, active consents, and 3-Tier DPDP action paths.</p>
-        </div>
-
-        <div className="flex items-center space-x-1.5 text-beige-800 dark:text-zinc-300 group-hover:text-beige-900 dark:group-hover:text-white transition-colors bg-beige-50 dark:bg-zinc-800/40 px-2.5 py-1 rounded-lg border border-beige-400/40 dark:border-zinc-800">
-          <span className="text-[10px] font-bold">
-            {isExpanded ? 'Hide Details' : 'Show Details'}
-          </span>
-          {isExpanded ? (
-            <ChevronUp className="w-3.5 h-3.5" />
-          ) : (
-            <ChevronDown className="w-3.5 h-3.5" />
-          )}
-        </div>
-      </div>
-
-      {/* Collapsible Content */}
-      {isExpanded ? (
-        <div className="mt-4 pt-4 border-t border-beige-400/20 dark:border-zinc-800/40">
-          
-          {/* Controls bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-end gap-3 mb-4">
+      {/* Controls bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-3 mb-4">
             {/* Search & Filter Controls */}
             <div className="flex flex-wrap items-center gap-2">
               
@@ -226,15 +193,6 @@ export const DigitalFootprintGrid = () => {
               })}
             </div>
           )}
-
-        </div>
-      ) : (
-        <div className="mt-3 p-3.5 text-center bg-beige-50 dark:bg-zinc-900/20 rounded-lg border border-dashed border-beige-400/40 dark:border-zinc-850">
-          <p className="text-xs font-semibold text-beige-800 dark:text-zinc-400">
-            Website footprint records and active consents are currently collapsed. Click on the heading above to expand.
-          </p>
-        </div>
-      )}
 
     </div>
   );

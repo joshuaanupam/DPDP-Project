@@ -18,7 +18,14 @@ export const OverviewStats = ({ setActiveTab }) => {
       
       {/* Stat 1: Digital Footprint Overview (clickable) */}
       <button
-        onClick={() => setActiveTab && setActiveTab('FOOTPRINT')}
+        onClick={() => {
+          if (setActiveTab) {
+            setActiveTab('FOOTPRINT');
+            setTimeout(() => {
+              document.getElementById('dynamic-tab-content')?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }
+        }}
         className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group cursor-pointer hover:ring-2 hover:ring-beige-900/30 dark:hover:ring-beige-300/30 transition-all text-left w-full"
       >
         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
