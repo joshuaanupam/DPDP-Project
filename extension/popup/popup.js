@@ -137,16 +137,7 @@ function calculatePrivacyScore(exposuresObj) {
  * Main UI refresh loop — Requests Authoritative Single Source of Truth from background.js
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'session']);
-  
-  // Verify user is authenticated before showing metrics
   const lockOverlay = document.getElementById('lock-overlay');
-  if (!storage.session) {
-    if (lockOverlay) lockOverlay.style.display = 'flex';
-    document.getElementById('privacy-score-badge').textContent = 'Locked';
-    document.getElementById('privacy-score-badge').style.borderColor = '#64748b';
-    return;
-  }
   if (lockOverlay) lockOverlay.style.display = 'none';
 
   // Determine active tab details first
@@ -232,21 +223,29 @@ async function refreshUI() {
     }
   }
 
-  // Send query message to content script on active tab for real-time DOM script/ad-tech parsing
+  // Send query message to content script on active tab for real-time DOM script/ad-tech parsing (OPTIONAL — Safe Fallback on Failure)
   if (activeTabId && activeTabState.status === 'success') {
     try {
-      const trackingRes = await chrome.tabs.sendMessage(activeTabId, { type: 'CHECK_BEHAVIORAL_TRACKING' }).catch(() => null);
+      const trackingRes = await new Promise((resolve) => {
+        try {
+          chrome.tabs.sendMessage(activeTabId, { type: 'CHECK_BEHAVIORAL_TRACKING' }, (res) => {
+            if (chrome.runtime.lastError) {
+              resolve(null);
+            } else {
+              resolve(res);
+            }
+          });
+        } catch (e) {
+          resolve(null);
+        }
+      });
       if (trackingRes && trackingRes.hasBehavioralTracking) {
         hasBehavioralTracking = true;
       }
-    } catch (err) {}
+    } catch (err) {
+      // Ignore content script message errors
+    }
   }
-
-  // Render Current Active Site Card
-  renderCurrentSite(activeTabState, currentExposure);
-
-  // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
-  renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
 
   // Render Overall Overview Metrics & Privacy Score (Passing extState as storageData)
   renderExposureOverview(activeExposures, extState);
@@ -254,8 +253,16 @@ async function refreshUI() {
   // Render Recent Website Activity List (rolling 5 most recently visited unique domains)
   renderRecentVisits(visits);
 
-  // Load and Render Website Brief Feature
-  await loadWebsiteBrief(activeTabState, activeTabId);
+  // Render Current Active Site Card
+  renderCurrentSite(activeTabState, currentExposure);
+
+  // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
+  renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
+
+  // Load and Render Website Brief Feature (Optional, non-blocking)
+  try {
+    await loadWebsiteBrief(activeTabState, activeTabId);
+  } catch (e) {}
 }
 
 /**
@@ -471,12 +478,24 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
 
   if (activeTabId) {
     try {
-      const response = await chrome.tabs.sendMessage(activeTabId, { type: 'GET_DOM_METADATA' }).catch(() => null);
+      const response = await new Promise((resolve) => {
+        try {
+          chrome.tabs.sendMessage(activeTabId, { type: 'GET_DOM_METADATA' }, (res) => {
+            if (chrome.runtime.lastError) {
+              resolve(null);
+            } else {
+              resolve(res);
+            }
+          });
+        } catch (e) {
+          resolve(null);
+        }
+      });
       if (response) {
         domMetadata = response;
       }
     } catch (e) {
-      console.warn('Could not contact content script for DOM metadata:', e.message);
+      // Fallback to default domMetadata
     }
   }
 
