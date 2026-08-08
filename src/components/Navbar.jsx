@@ -16,26 +16,26 @@ export const Navbar = () => {
   const badge = getScoreBadge(score);
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80 bg-[#0B0F19]/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/50 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           
           {/* Brand Logo */}
           <div className="flex items-center space-x-3">
             <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25 border border-indigo-400/30">
-              <Shield className="w-6 h-6 text-white" />
+              <Shield className="w-6 h-6 text-slate-900" />
               <Sparkles className="w-3.5 h-3.5 text-cyan-300 absolute -top-1 -right-1 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-heading font-extrabold text-xl tracking-tight text-white">
+                <span className="font-heading font-extrabold text-xl tracking-tight text-slate-900">
                   Privacy<span className="gradient-text">Lens</span>
                 </span>
                 <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   DPDP Shield
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium">Digital Footprint & Rights Control Center</p>
+              <p className="text-xs text-slate-600 font-medium">Digital Footprint & Rights Control Center</p>
             </div>
           </div>
 
@@ -63,12 +63,12 @@ export const Navbar = () => {
               </div>
               <div>
                 <div className="flex items-center space-x-1.5">
-                  <span className="text-xs font-semibold text-slate-300">Privacy Index Score</span>
+                  <span className="text-xs font-semibold text-slate-700">Privacy Index Score</span>
                   <span className={`text-[10px] font-extrabold tracking-wider uppercase px-1.5 py-0.2 rounded ${badge.bg} ${badge.text}`}>
                     {badge.label}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400">Live DPDP §6 Risk Weighting</p>
+                <p className="text-[11px] text-slate-600">Live DPDP §6 Risk Weighting</p>
               </div>
             </div>
           </div>
@@ -86,13 +86,13 @@ export const Navbar = () => {
             </div>
 
             {/* User Profile Pill */}
-            <div className="flex items-center space-x-3 pl-3 border-l border-slate-800">
-              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 font-semibold shadow-inner">
+            <div className="flex items-center space-x-3 pl-3 border-l border-slate-200/50">
+              <div className="flex items-center justify-center w-9 h-9 rounded-full glass-panel border border-slate-200/50 text-indigo-400 font-semibold shadow-inner">
                 {userData.name.charAt(0)}
               </div>
               <div className="hidden lg:block text-left">
-                <p className="text-sm font-semibold text-white leading-tight">{userData.name}</p>
-                <p className="text-xs text-slate-400 truncate max-w-[120px]">{userData.email}</p>
+                <p className="text-sm font-semibold text-slate-900 leading-tight">{userData.name}</p>
+                <p className="text-xs text-slate-600 truncate max-w-[120px]">{userData.email}</p>
               </div>
             </div>
 

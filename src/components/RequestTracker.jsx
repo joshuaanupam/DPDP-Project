@@ -16,7 +16,7 @@ export const RequestTracker = () => {
       case 'SUBMITTED':
         return { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400', icon: Send, label: 'SUBMITTED' };
       default:
-        return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400', icon: Clock, label: status };
+        return { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-600', icon: Clock, label: status };
     }
   };
 
@@ -29,38 +29,42 @@ export const RequestTracker = () => {
       case 'TIER3_GENERATED_NOTICE':
         return { text: 'text-violet-400', icon: FileText, label: 'Tier 3 (Legal Notice)' };
       default:
-        return { text: 'text-slate-400', icon: FileText, label: method };
+        return { text: 'text-slate-600', icon: FileText, label: method };
     }
   };
 
   const filteredRequests = requests.filter(req => {
+    const siteName = req.siteName || req.websiteName || 'Website';
+    const domain = req.domain || req.websiteDomain || '';
+    const refId = req.referenceId || req.id || '';
+
     const matchesStatus = statusFilter === 'ALL' || req.status === statusFilter;
-    const matchesSearch = req.siteName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          req.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (req.referenceId && req.referenceId.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = siteName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          refId.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
   return (
-    <div className="glass-panel rounded-3xl p-6 sm:p-8 mb-10 border border-slate-800">
+    <div className="glass-panel rounded-3xl p-6 sm:p-8 mb-10 border border-slate-200/50">
       
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold font-heading text-white flex items-center">
+          <h2 className="text-xl font-bold font-heading text-slate-900 flex items-center">
             Privacy Request Tracker
             <span className="ml-3 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
               {requests.length} Requests Recorded
             </span>
           </h2>
-          <p className="text-sm text-slate-400">Track real-time status and legal statutory proof for consent revocations and data erasure requests.</p>
+          <p className="text-sm text-slate-600">Track real-time status and legal statutory proof for consent revocations and data erasure requests.</p>
         </div>
 
         {/* Controls */}
         <div className="flex items-center space-x-3">
           
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
             <input
               type="text"
               value={searchQuery}
@@ -71,11 +75,11 @@ export const RequestTracker = () => {
           </div>
 
           <div className="flex items-center space-x-1 glass-panel p-1 rounded-xl">
-            <Filter className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
+            <Filter className="w-3.5 h-3.5 text-slate-600 ml-2 mr-1" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-xs font-medium text-slate-300 focus:outline-none cursor-pointer pr-2"
+              className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none cursor-pointer pr-2"
             >
               <option value="ALL" className="bg-[#131B2E]">All Statuses</option>
               <option value="SUBMITTED" className="bg-[#131B2E] text-cyan-400">Submitted</option>
@@ -91,7 +95,7 @@ export const RequestTracker = () => {
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+            <tr className="border-b border-slate-200/50 text-slate-600 font-semibold uppercase tracking-wider">
               <th className="py-3 px-4">Target Website</th>
               <th className="py-3 px-4">Request Type & Target</th>
               <th className="py-3 px-4">Action Method</th>
@@ -114,21 +118,21 @@ export const RequestTracker = () => {
                 const MethodIcon = method.icon;
 
                 return (
-                  <tr key={req.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={req.id} className="hover:glass-panel/40 transition-colors">
                     
                     {/* Website */}
-                    <td className="py-4 px-4 font-medium text-white">
-                      <div className="font-bold text-sm text-slate-100">{req.siteName}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">{req.domain}</div>
+                    <td className="py-4 px-4 font-medium text-slate-900">
+                      <div className="font-bold text-sm text-slate-900">{req.siteName || req.websiteName || 'Website'}</div>
+                      <div className="text-[11px] text-slate-600 font-mono">{req.domain || req.websiteDomain || ''}</div>
                     </td>
 
                     {/* Request Type */}
                     <td className="py-4 px-4">
-                      <span className="font-bold text-slate-200 block">
+                      <span className="font-bold text-slate-800 block">
                         {req.requestType === 'CONSENT_REVOCATION' ? 'Consent Revocation' : 'Data Erasure (§12)'}
                       </span>
                       <span className="text-[11px] text-indigo-300 font-medium">
-                        Target: {req.targetConsent}
+                        Target: {req.targetConsent || 'All Data'}
                       </span>
                     </td>
 
@@ -142,7 +146,9 @@ export const RequestTracker = () => {
 
                     {/* Reference ID & Date */}
                     <td className="py-4 px-4">
-                      <span className="font-mono text-slate-300 font-bold block">{req.referenceId || 'N/A'}</span>
+                      <span className="font-mono text-slate-700 font-bold block">
+                        {req.referenceId || (req.id ? req.id.slice(0, 13) : 'N/A')}
+                      </span>
                       <span className="text-[11px] text-slate-500">
                         {new Date(req.createdAt).toLocaleDateString()} {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
