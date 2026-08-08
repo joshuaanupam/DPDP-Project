@@ -569,12 +569,12 @@ try {
     .reclaim-overlay-wrapper {
       width: 340px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f8fafc;
+      background-color: #ffffff;
       color: #0f172a;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
-      border: 1px solid #e2e8f0;
+      box-shadow: 0 8px 32px rgba(138, 122, 92, 0.15), 0 2px 8px rgba(138, 122, 92, 0.08);
+      border: 1px solid #e5e0d3;
       animation: reclaim-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
       line-height: 1.4;
     }
@@ -586,7 +586,7 @@ try {
 
     /* --- Header --- */
     .header {
-      background: linear-gradient(135deg, #1e293b, #0f172a);
+      background: linear-gradient(135deg, #6b5b3a, #524428);
       color: #ffffff;
       padding: 14px 16px;
       display: flex;
@@ -601,7 +601,7 @@ try {
       align-items: center;
       gap: 6px;
     }
-    .brand-icon { color: #38bdf8; }
+    .brand-icon { color: #EFE8DA; }
     .header-right {
       display: flex;
       align-items: center;
@@ -637,17 +637,17 @@ try {
     .container { padding: 12px; }
     .card {
       background: #ffffff;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #e5e0d3;
       border-radius: 8px;
       padding: 12px;
       margin-bottom: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 3px rgba(138, 122, 92, 0.05);
     }
     .card-title {
       font-size: 11px;
       text-transform: uppercase;
       font-weight: 700;
-      color: #64748b;
+      color: #6b6a64;
       letter-spacing: 0.5px;
       margin-bottom: 8px;
       display: flex;
@@ -680,13 +680,13 @@ try {
       font-size: 11px;
       padding: 3px 8px;
       border-radius: 4px;
-      background-color: #f1f5f9;
-      color: #334155;
+      background-color: #F7F5EF;
+      color: #6b6a64;
       font-weight: 500;
     }
     .chip-consent {
-      background-color: #e0f2fe;
-      color: #0369a1;
+      background-color: #EFE8DA;
+      color: #6b5b3a;
     }
 
     /* --- Risk Pills --- */
@@ -710,19 +710,19 @@ try {
       text-align: center;
     }
     .summary-stat {
-      background: #f8fafc;
+      background: #F7F5EF;
       padding: 8px 4px;
       border-radius: 6px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #e5e0d3;
     }
     .stat-number {
       font-size: 16px;
       font-weight: 800;
-      color: #2563eb;
+      color: #8a7a5c;
     }
     .stat-label {
       font-size: 10px;
-      color: #64748b;
+      color: #6b6a64;
       margin-top: 2px;
     }
 
@@ -730,7 +730,7 @@ try {
     .btn-dashboard {
       display: block;
       width: 100%;
-      background: #2563eb;
+      background: #8a7a5c;
       color: white;
       text-align: center;
       padding: 9px;
@@ -743,7 +743,7 @@ try {
       margin-top: 6px;
       transition: background 0.2s;
     }
-    .btn-dashboard:hover { background: #1d4ed8; }
+    .btn-dashboard:hover { background: #6b5b3a; }
 
     /* --- Recent Activity List --- */
     .recent-list {
@@ -756,7 +756,7 @@ try {
       justify-content: space-between;
       align-items: center;
       padding: 6px 0;
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid #e5e0d3;
       font-size: 12px;
     }
     .recent-item:last-child { border-bottom: none; }
@@ -764,11 +764,11 @@ try {
     /* --- Footer --- */
     .privacy-note {
       font-size: 11px;
-      color: #64748b;
-      background: #f1f5f9;
+      color: #6b6a64;
+      background: #F7F5EF;
       padding: 8px 12px;
       text-align: center;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid #e5e0d3;
       line-height: 1.4;
     }
 
