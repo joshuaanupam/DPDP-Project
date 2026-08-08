@@ -1,28 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Sparkles, Key, Mail, AlertCircle, RefreshCw } from 'lucide-react';
+import { Shield, Sparkles, Key, Mail, AlertCircle, RefreshCw, User } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const LoginPage = () => {
-  const { login, authLoading } = usePrivacy();
+  const { login, register, authLoading } = usePrivacy();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('joshua@example.com');
   const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Reset inputs when toggling modes
+  useEffect(() => {
+    setError('');
+    if (!isSignUp) {
+      setEmail('joshua@example.com');
+      setPassword('password');
+      setName('');
+    } else {
+      setEmail('');
+      setPassword('');
+      setName('');
+    }
+  }, [isSignUp]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSignUp && !name) {
+      setError('Please enter your name.');
+      return;
+    }
     if (!email || !password) {
-      setError('Please fill in both email and password fields.');
+      setError('Please fill in all credentials fields.');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const res = await login(email, password);
+    let res;
+    if (isSignUp) {
+      res = await register(name, email, password);
+    } else {
+      res = await login(email, password);
+    }
+
     setLoading(false);
     if (!res.success) {
-      setError(res.message || 'Authentication failed. Please verify your credentials.');
+      setError(res.message || 'Authentication failed. Please verify your details.');
     }
   };
 
@@ -55,7 +81,7 @@ export const LoginPage = () => {
       <div className="w-full max-w-md mx-4 relative z-10">
         
         {/* Logo / Title Area */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6">
           <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/25 border border-indigo-400/30 mb-3">
             <Shield className="w-8 h-8 text-slate-950" />
             <Sparkles className="w-4 h-4 text-cyan-300 absolute -top-1 -right-1 animate-pulse" />
@@ -66,11 +92,17 @@ export const LoginPage = () => {
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 uppercase tracking-wider font-semibold">DPDP Rights Control Center</p>
         </div>
 
-        {/* Login Card */}
+        {/* Auth Card */}
         <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-indigo-500/20 shadow-2xl">
           <div className="mb-6">
-            <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">Welcome Back</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Log in to manage your digital footprint and consents</p>
+            <h2 className="text-xl font-bold font-heading text-slate-900 dark:text-white">
+              {isSignUp ? 'Create Account' : 'Welcome Back'}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {isSignUp 
+                ? 'Sign up to register your digital footprint and rights' 
+                : 'Log in to manage your digital footprint and consents'}
+            </p>
           </div>
 
           {error && (
@@ -82,8 +114,27 @@ export const LoginPage = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             
+            {isSignUp && (
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">Full Name</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                    <User className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Enter your name"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">Registered Email</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">Email Address</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
                   <Mail className="w-4 h-4" />
@@ -93,14 +144,14 @@ export const LoginPage = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
-                  placeholder="joshua@example.com"
+                  placeholder="name@example.com"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">Master Password</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">Password</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
                   <Key className="w-4 h-4" />
@@ -124,10 +175,21 @@ export const LoginPage = () => {
               {loading ? (
                 <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
               ) : (
-                <span>Access Dashboard</span>
+                <span>{isSignUp ? 'Create Account' : 'Access Dashboard'}</span>
               )}
             </button>
           </form>
+
+          {/* Toggle mode link */}
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+            >
+              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            </button>
+          </div>
 
           <div className="mt-6 pt-5 border-t border-slate-200/50 dark:border-slate-800 text-center">
             <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">

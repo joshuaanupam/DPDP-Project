@@ -99,6 +99,54 @@ app.post('/api/auth/login', async (req, res, next) => {
   }
 });
 
+app.post('/api/auth/register', async (req, res, next) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email, and password are required.' });
+    }
+    const existingUser = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Email is already registered.' });
+    }
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email: email.toLowerCase().trim(),
+        passwordHash: password, // For demo, store directly
+        privacyScore: 100
+      }
+    });
+
+    // Auto-create initial consents and data entries so dashboard is initialized
+    await prisma.consent.create({
+      data: {
+        userId: user.id,
+        websiteId: (await prisma.website.findFirst())?.id || 'web_shopease',
+        consentType: 'Account Creation',
+        status: 'ACTIVE'
+      }
+    });
+
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        privacyScore: user.privacyScore
+      },
+      token: `token_${user.id}`
+    });
+  } catch (err) {
+    next(err);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 app.get('/api/auth/session/:token', async (req, res, next) => {
   const { PrismaClient } = require('@prisma/client');
   const prisma = new PrismaClient();

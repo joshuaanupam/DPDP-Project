@@ -106,6 +106,38 @@ export const PrivacyProvider = ({ children }) => {
     }
   };
 
+  // Execute User Registration
+  const register = async (name, email, password) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem('privacylens_token', data.token);
+        setUserData(data.user);
+        setIsAuthenticated(true);
+        setBackendActive(true);
+
+        window.postMessage({
+          direction: 'from-page',
+          type: 'SetExtensionSession',
+          detail: { token: data.token, user: data.user }
+        }, '*');
+
+        await fetchDashboardData(data.user.id);
+        await fetchRequests(data.user.id);
+        await fetchAuditLogs(data.user.id);
+        return { success: true };
+      }
+      return { success: false, message: data.message || 'Registration failed.' };
+    } catch (err) {
+      return { success: false, message: 'Could not connect to backend authentication server.' };
+    }
+  };
+
   // Execute User Logout
   const logout = () => {
     localStorage.removeItem('privacylens_token');
@@ -707,6 +739,7 @@ export const PrivacyProvider = ({ children }) => {
         authLoading,
         extensionStatus,
         login,
+        register,
         logout,
         websites,
         filteredWebsites,
