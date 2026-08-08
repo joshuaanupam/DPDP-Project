@@ -43,6 +43,23 @@ app.get('/api/audit/:userId', auditController.getAuditLogs);
 // Website Details
 app.get('/api/websites/:websiteId', websiteController.getWebsiteDetail);
 
+// Reset Demo Database
+app.post('/api/demo/reset', async (req, res) => {
+  try {
+    const { runSeed } = require('./prisma/seed');
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    await runSeed(prismaClient);
+    await prismaClient.$disconnect();
+    
+    res.json({ success: true, message: 'Database successfully reset and re-seeded with default websites and consents.' });
+  } catch (err) {
+    console.error('Error resetting database:', err);
+    res.status(500).json({ success: false, message: 'Failed to reset database', error: err.message });
+  }
+});
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled API Error:', err.stack);

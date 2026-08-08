@@ -1,19 +1,20 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-async function main() {
+async function runSeed(prismaInstance) {
+  const db = prismaInstance || prisma;
   console.log('🌱 Starting PrivacyLens Database Seed...');
 
   // Clean existing database records
-  await prisma.auditLog.deleteMany();
-  await prisma.privacyRequest.deleteMany();
-  await prisma.consent.deleteMany();
-  await prisma.dataItem.deleteMany();
-  await prisma.website.deleteMany();
-  await prisma.user.deleteMany();
+  await db.auditLog.deleteMany();
+  await db.privacyRequest.deleteMany();
+  await db.consent.deleteMany();
+  await db.dataItem.deleteMany();
+  await db.website.deleteMany();
+  await db.user.deleteMany();
 
   // 1. Create Default Primary Demo User
-  const user = await prisma.user.create({
+  const user = await db.user.create({
     data: {
       id: 'usr_12345',
       name: 'Joshua',
@@ -25,7 +26,7 @@ async function main() {
   console.log(`👤 Created Demo User: ${user.name} (${user.email})`);
 
   // 2. Create Websites with 3 Deletion Tiers
-  const shopEase = await prisma.website.create({
+  const shopEase = await db.website.create({
     data: {
       id: 'web_shopease',
       domain: 'shopease.com',
@@ -38,7 +39,7 @@ async function main() {
     }
   });
 
-  const socialHub = await prisma.website.create({
+  const socialHub = await db.website.create({
     data: {
       id: 'web_socialhub',
       domain: 'socialhub.io',
@@ -50,7 +51,7 @@ async function main() {
     }
   });
 
-  const cloudData = await prisma.website.create({
+  const cloudData = await db.website.create({
     data: {
       id: 'web_clouddata',
       domain: 'clouddata.net',
@@ -61,7 +62,7 @@ async function main() {
     }
   });
 
-  const quickBuy = await prisma.website.create({
+  const quickBuy = await db.website.create({
     data: {
       id: 'web_quickbuy',
       domain: 'quickbuy.in',
@@ -76,7 +77,7 @@ async function main() {
   console.log('🌐 Created Websites across Tiers 1, 2, and 3');
 
   // 3. Create Data Items Shared with Websites
-  await prisma.dataItem.createMany({
+  await db.dataItem.createMany({
     data: [
       { userId: user.id, websiteId: shopEase.id, dataType: 'Email' },
       { userId: user.id, websiteId: shopEase.id, dataType: 'Phone' },
@@ -94,7 +95,7 @@ async function main() {
   });
 
   // 4. Create Active and Revoked Consents
-  await prisma.consent.createMany({
+  await db.consent.createMany({
     data: [
       { userId: user.id, websiteId: shopEase.id, consentType: 'Account Creation', status: 'ACTIVE' },
       { userId: user.id, websiteId: shopEase.id, consentType: 'Marketing Emails', status: 'ACTIVE' },
@@ -109,7 +110,7 @@ async function main() {
   });
 
   // 5. Create Initial Privacy Requests
-  await prisma.privacyRequest.create({
+  await db.privacyRequest.create({
     data: {
       userId: user.id,
       websiteId: shopEase.id,
@@ -120,7 +121,7 @@ async function main() {
     }
   });
 
-  await prisma.privacyRequest.create({
+  await db.privacyRequest.create({
     data: {
       userId: user.id,
       websiteId: socialHub.id,
@@ -132,7 +133,7 @@ async function main() {
   });
 
   // 6. Create Chronological Audit Logs
-  await prisma.auditLog.createMany({
+  await db.auditLog.createMany({
     data: [
       {
         userId: user.id,
@@ -168,11 +169,16 @@ async function main() {
   console.log('✅ Database Seeding Completed Successfully!');
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Seeding Error:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+if (require.main === module) {
+  runSeed()
+    .catch((e) => {
+      console.error('❌ Seeding Error:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
+
+module.exports = { runSeed };
+
