@@ -1147,6 +1147,7 @@ try {
   // Listen for explicit Dashboard sync requests
   window.addEventListener('message', (e) => {
     if (e.data && e.data.type === 'REQUEST_EXTENSION_SYNC') {
+      if (!isExtensionContextValid()) return;
       refreshOverlayUI();
     }
   });
