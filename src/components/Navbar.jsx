@@ -39,39 +39,6 @@ export const Navbar = () => {
             </span>
           </div>
 
-          {/* Center: Digital Privacy Score Pill */}
-          <div className="hidden md:flex items-center space-x-3">
-            <div className={`flex items-center space-x-3 px-4 py-2 rounded-full border ${badge.border} ${badge.bg} ${badge.glow} transition-all duration-300`}>
-              <div className="relative flex items-center justify-center">
-                <svg className="w-9 h-9 transform -rotate-90">
-                  <circle cx="18" cy="18" r="14" stroke="currentColor" strokeWidth="3" fill="transparent" className="text-slate-800" />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="14"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    fill="transparent"
-                    strokeDasharray={88}
-                    strokeDashoffset={88 - (88 * score) / 100}
-                    className={`${badge.text} transition-all duration-700 ease-out`}
-                  />
-                </svg>
-                <span className={`absolute text-xs font-extrabold ${badge.text}`}>
-                  {score}
-                </span>
-              </div>
-              <div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-xs font-semibold text-slate-700">Privacy Index Score</span>
-                  <span className={`text-[10px] font-extrabold tracking-wider uppercase px-1.5 py-0.2 rounded ${badge.bg} ${badge.text}`}>
-                    {badge.label}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-600">Live DPDP §6 Risk Weighting</p>
-              </div>
-            </div>
-          </div>
 
           {/* Right: Extension Status & User Profile */}
           <div className="flex items-center space-x-4">

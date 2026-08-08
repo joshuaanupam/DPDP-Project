@@ -120,10 +120,7 @@ export const OverviewStats = () => {
             <TrendingUp className={`w-3.5 h-3.5 absolute ${scoreInfo.text}`} />
           </div>
         </div>
-        <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 flex items-center justify-between text-[10px]">
-          <span className="text-beige-800 dark:text-zinc-400">Formula: DPDP §6 Matrix</span>
-          <span className="text-beige-900 dark:text-beige-300 font-bold">Auto-updated</span>
-        </div>
+
       </div>
 
     </div>
