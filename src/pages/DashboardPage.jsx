@@ -18,6 +18,7 @@ import { usePrivacy } from '../context/PrivacyContext';
 
 export const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState('FOOTPRINT'); // 'FOOTPRINT', 'TRACKER', 'AUDIT'
+  const [footprintExpanded, setFootprintExpanded] = useState(false); // grid collapsed by default
   const { resetDashboard, isAuthenticated, authLoading, featureToggles } = usePrivacy();
 
   // Auto-redirect if active tab's feature gets disabled
@@ -68,7 +69,10 @@ export const DashboardPage = () => {
 
           {/* Overview Stat Cards — only visible on Footprint tab */}
           {(activeTab === 'FOOTPRINT' || activeTab === null) && (
-            <OverviewStats activeTab={activeTab} setActiveTab={setActiveTab} />
+            <OverviewStats
+              footprintExpanded={footprintExpanded}
+              setFootprintExpanded={setFootprintExpanded}
+            />
           )}
 
           {/* Dynamic Tab Content */}
