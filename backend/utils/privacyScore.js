@@ -1,7 +1,7 @@
 /**
  * @file privacyScore.js
  * @description Digital Privacy Score Engine for PrivacyLens DPDP Platform
- * Formula: Score = 100 - (ActiveMarketingConsents * 5) - (HighRiskSites * 10) + (RevokedConsents * 3)
+ * Formula: Score = 100 - (ActiveMarketingConsents * 5) - (HighRiskSites * 10) + (RevokedConsents * 3) - ChildPenalty - BreachPenalty
  * Bounds: Clamped strictly to [0, 100]
  * Owned by: TM1 (Project Lead & AI Intelligence Engineer) & TM4 (Backend Engineer)
  */
@@ -13,22 +13,55 @@
  * @param {number} [params.activeMarketingConsents=0] - Number of active marketing/tracking consents
  * @param {number} [params.highRiskSites=0] - Number of high-risk websites storing user data
  * @param {number} [params.revokedConsents=0] - Number of successfully revoked consents (rewards user)
+ * @param {boolean} [params.isChildWithoutParentalConsent=false] - True if user is < 18 and guardianId is null
+ * @param {boolean} [params.hasUnresolvedBreaches=false] - True if there are active unresolved breaches on user's visited sites
  * @returns {number} Score integer between 0 and 100
  */
 function calculatePrivacyScore({
   activeMarketingConsents = 0,
   highRiskSites = 0,
-  revokedConsents = 0
+  revokedConsents = 0,
+  isChildWithoutParentalConsent = false,
+  hasUnresolvedBreaches = false
 } = {}) {
   const marketing = Math.max(0, parseInt(activeMarketingConsents, 10) || 0);
   const highRisk = Math.max(0, parseInt(highRiskSites, 10) || 0);
   const revoked = Math.max(0, parseInt(revokedConsents, 10) || 0);
 
   // Exact DPDP Master Document Formula
-  const rawScore = 100 - (marketing * 5) - (highRisk * 10) + (revoked * 3);
+  let rawScore = 100 - (marketing * 5) - (highRisk * 10) + (revoked * 3);
+
+  // Child Data Penalty (§9 / §10 DPDP Act): Deduct 15 points
+  if (isChildWithoutParentalConsent) {
+    rawScore -= 15;
+  }
+
+  // Unresolved Data Breach Penalty: Deduct 25 points
+  if (hasUnresolvedBreaches) {
+    rawScore -= 25;
+  }
 
   // Strictly clamp between 0 and 100
   return Math.max(0, Math.min(100, Math.round(rawScore)));
+}
+
+/**
+ * Helper to calculate age from Date of Birth string.
+ */
+function calculateAge(dobString) {
+  if (!dobString) return 18;
+  try {
+    const today = new Date();
+    const birthDate = new Date(dobString);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  } catch (e) {
+    return 18;
+  }
 }
 
 /**
@@ -38,6 +71,9 @@ function calculatePrivacyScore({
  * @param {Array<object>} [data.websites=[]] - List of connected website records
  * @param {Array<object>} [data.consents=[]] - List of consent records
  * @param {Array<object>} [data.requests=[]] - List of privacy requests
+ * @param {object} [data.user=null] - User object containing dob and guardianId
+ * @param {boolean} [data.isChildWithoutParentalConsent=false] - Override flag
+ * @param {boolean} [data.hasUnresolvedBreaches=false] - Override flag
  * @returns {{
  *   score: number,
  *   band: string,
@@ -50,14 +86,19 @@ function calculatePrivacyScore({
  *     revokedConsents: number,
  *     totalWebsites: number,
  *     activeConsents: number,
- *     pendingRequests: number
+ *     pendingRequests: number,
+ *     isChildWithoutParentalConsent: boolean,
+ *     hasUnresolvedBreaches: boolean
  *   }
  * }}
  */
 function calculateUserPrivacyScoreFromData({
   websites = [],
   consents = [],
-  requests = []
+  requests = [],
+  user = null,
+  isChildWithoutParentalConsent = false,
+  hasUnresolvedBreaches = false
 } = {}) {
   const marketingKeywords = ['marketing', 'ad', 'tracking', 'promot', 'newsletter', '3rd-party'];
 
@@ -93,11 +134,31 @@ function calculateUserPrivacyScoreFromData({
   // Count pending privacy requests
   const pendingRequestsCount = requests.filter(r => r.status === 'SUBMITTED' || r.status === 'AWAITING_RESPONSE').length;
 
+  // Evaluate Child Data Penalty dynamically
+  let childPenaltyActive = isChildWithoutParentalConsent;
+  if (user && user.dob) {
+    const age = calculateAge(user.dob);
+    if (age < 18 && (!user.guardianId && !user.parentConsentActive)) {
+      childPenaltyActive = true;
+    }
+  }
+
+  // Evaluate Data Breach Penalty dynamically
+  let breachActive = hasUnresolvedBreaches;
+  if (websites && websites.length > 0) {
+    const breachedWebsites = websites.filter(w => w.hasBreach === true || w.isBreached === true || w.unresolvedBreach === true);
+    if (breachedWebsites.length > 0) {
+      breachActive = true;
+    }
+  }
+
   // Compute final score
   const score = calculatePrivacyScore({
     activeMarketingConsents: activeMarketingCount,
     highRiskSites: highRiskSitesCount,
-    revokedConsents: revokedConsentsCount
+    revokedConsents: revokedConsentsCount,
+    isChildWithoutParentalConsent: childPenaltyActive,
+    hasUnresolvedBreaches: breachActive
   });
 
   const bandInfo = getScoreBand(score);
@@ -111,7 +172,9 @@ function calculateUserPrivacyScoreFromData({
       revokedConsents: revokedConsentsCount,
       totalWebsites: websites.length,
       activeConsents: activeTotalConsents,
-      pendingRequests: pendingRequestsCount
+      pendingRequests: pendingRequestsCount,
+      isChildWithoutParentalConsent: childPenaltyActive,
+      hasUnresolvedBreaches: breachActive
     }
   };
 }
@@ -195,6 +258,10 @@ function computeWebsiteRisk(website = {}) {
  */
 async function calculateAndSavePrivacyScore(prisma, userId) {
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
     const userConsents = await prisma.consent.findMany({
       where: { userId },
       include: { website: true }
@@ -216,7 +283,8 @@ async function calculateAndSavePrivacyScore(prisma, userId) {
     const result = calculateUserPrivacyScoreFromData({
       websites: userWebsites,
       consents: userConsents,
-      requests: userRequests
+      requests: userRequests,
+      user: user
     });
 
     await prisma.user.update({
