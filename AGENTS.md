@@ -29,3 +29,5 @@ To prevent Git merge conflicts in this fast-paced sprint, NO TEAM MEMBER / AI AG
 - Extension (Member 2) logs to console & local mock fallback.
 - Backend (Member 4) tests via curl/Postman scripts.
 - AI Service (Member 1) uses rule-based fallback if Gemini API is unavailable.
+
+<!-- TM1: MaheshKaranam2006 - AI Intelligence, Privacy Score, Website Brief - DPDP Act Compliance -->

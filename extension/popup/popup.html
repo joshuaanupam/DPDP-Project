@@ -246,6 +246,43 @@
     }
     input:checked + .slider { background-color: #6366f1; }
     input:checked + .slider:before { transform: translateX(16px); }
+
+    /* Lock Overlay styles */
+    #lock-overlay {
+      display: none;
+      position: absolute;
+      top: 50px;
+      left: 0;
+      width: 100%;
+      height: 310px;
+      background: rgba(248, 250, 252, 0.98);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .lock-icon {
+      font-size: 36px;
+      margin-bottom: 10px;
+    }
+    
+    .lock-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    
+    .lock-desc {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
   </style>
 </head>
 <body>
@@ -257,6 +294,14 @@
     <div class="score-badge" id="privacy-score-badge">
       Score: 100/100
     </div>
+  </div>
+
+  <!-- Shared Auth Lock Overlay -->
+  <div id="lock-overlay">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-title">Extension Inactive</div>
+    <div class="lock-desc">Please sign in to the web dashboard to sync your credentials and activate the RECLAIM privacy shield.</div>
+    <button id="btn-login-redirect" class="btn-dashboard" style="max-width: 200px; margin: 0 auto;">Log In to Dashboard</button>
   </div>
 
   <div class="container">
@@ -276,6 +321,22 @@
         <!-- Dynamic Category Chips -->
       </div>
       <div id="child-safe-alert-container"></div>
+    </div>
+
+    <!-- Website Brief Card -->
+    <div class="card" id="website-brief-card" style="display: none;">
+      <div class="card-title">
+        <span>Website Brief</span>
+        <span id="btn-refresh-brief" style="cursor: pointer; color: var(--primary); font-size: 11px; font-weight: 700; transition: color 0.2s;">[Refresh]</span>
+      </div>
+      <div id="brief-content" style="font-size: 12px; line-height: 1.5; color: var(--text);">
+        <div id="brief-site-name" style="font-weight: 700; font-size: 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <span id="brief-site-icon">🌐</span> <span id="brief-site-title">Detecting...</span>
+        </div>
+        <div id="brief-text" style="color: var(--text-muted); font-size: 11.5px; white-space: pre-line; line-height: 1.4;">
+          Loading summary...
+        </div>
+      </div>
     </div>
 
     <!-- Child Safe Mode Control Card (§9) -->

@@ -160,6 +160,210 @@ function detectBehavioralTracking() {
 }
 
 /**
+ * Detects if a form is a registration / signup form (as opposed to a login form).
+ * Uses ONLY safe DOM metadata (button labels, headings, form attributes).
+ * NEVER reads input values, passwords, or PII.
+ */
+function isRegistrationForm(form) {
+  if (!form) return false;
+
+  const action = (form.action || '').toLowerCase();
+  const id = (form.id || '').toLowerCase();
+  const className = (form.className || '').toLowerCase();
+  
+  // Check buttons
+  const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]'));
+  const buttonText = buttons.map(b => (b.innerText || b.value || '').toLowerCase()).join(' ');
+
+  // Form inner text summary (top 300 chars only)
+  const formSummary = (form.innerText || '').substring(0, 300).toLowerCase();
+
+  const fullStr = `${action} ${id} ${className} ${buttonText} ${formSummary}`;
+
+  // Explicit login-only check (e.g. Sign in, Log in without signup keywords)
+  const isLoginPattern = (fullStr.includes('login') || fullStr.includes('log in') || fullStr.includes('signin') || fullStr.includes('sign in')) &&
+                         !(fullStr.includes('signup') || fullStr.includes('sign up') || fullStr.includes('register') || fullStr.includes('create account') || fullStr.includes('create your account') || fullStr.includes('join'));
+
+  if (isLoginPattern) return false;
+
+  // Registration keywords
+  const regKeywords = [
+    'signup', 'sign up', 'sign-up', 'register', 'registration',
+    'create account', 'create your account', 'create-account',
+    'join now', 'get started', 'new account', 'register.php', 'signup.html'
+  ];
+
+  const hasRegKeyword = regKeywords.some(kw => fullStr.includes(kw));
+
+  // Input attributes check (confirm password, terms, first_name)
+  const inputs = Array.from(form.querySelectorAll('input'));
+  const inputAttributes = inputs.map(i => `${i.name || ''} ${i.id || ''} ${i.placeholder || ''}`.toLowerCase()).join(' ');
+  const hasRegInputs = inputAttributes.includes('confirm') || inputAttributes.includes('first_name') || inputAttributes.includes('last_name') || inputAttributes.includes('terms') || inputAttributes.includes('agree');
+
+  return hasRegKeyword || hasRegInputs;
+}
+
+/**
+ * Checks for successful registration confirmation signals (URL path or DOM confirmation message).
+ */
+function checkForRegistrationConfirmation() {
+  try {
+    const rawPending = sessionStorage.getItem('reclaim_pending_registration');
+    if (!rawPending) return;
+
+    const pending = JSON.parse(rawPending);
+    const now = Date.now();
+
+    // Expire pending registration after 2 minutes
+    if (now - pending.timestamp > 120000) {
+      sessionStorage.removeItem('reclaim_pending_registration');
+      return;
+    }
+
+    const domain = normalizeDomain(window.location.hostname);
+    if (domain !== pending.domain) return;
+
+    // Check 1: Confirmation URL paths
+    const href = window.location.href.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+    const isConfirmationUrl = [
+      '/welcome', '/dashboard', '/account-created', '/signup-success',
+      '/verify-email', '/confirm', '/getting-started', '/onboarding',
+      '/home', '/success', '/account', '/registered'
+    ].some(p => path.includes(p) || href.includes(p));
+
+    // Check 2: DOM confirmation messages
+    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().substring(0, 2000);
+    const isConfirmationText = [
+      'account created', 'registration successful', 'welcome to',
+      'check your email', 'verification link', 'verification email sent',
+      'account setup complete', 'successfully registered', 'welcome aboard',
+      'thanks for registering', 'thanks for signing up', 'thank you for signing up',
+      'account has been created', 'your account is ready'
+    ].some(kw => bodyText.includes(kw));
+
+    // Check 3: Post-submit navigation (different page or clean redirect after submission)
+    const isPostSubmitNav = (document.referrer && document.referrer !== window.location.href && !href.includes('signup') && !href.includes('register'));
+
+    if (isConfirmationUrl || isConfirmationText || isPostSubmitNav) {
+      // Clear pending token so it fires ONLY ONCE
+      sessionStorage.removeItem('reclaim_pending_registration');
+
+      const sessionConfirmedKey = 'reclaim_confirmed_reg_' + pending.eventId;
+      if (sessionStorage.getItem(sessionConfirmedKey)) return;
+      sessionStorage.setItem(sessionConfirmedKey, '1');
+
+      // Send ACCOUNT_CREATED event to service worker
+      chrome.runtime.sendMessage({
+        type: 'ACCOUNT_CREATED',
+        domain: domain,
+        eventId: pending.eventId,
+        timestamp: new Date().toISOString(),
+        url: window.location.href,
+        confirmationSignal: isConfirmationText ? 'DOM_TEXT' : (isConfirmationUrl ? 'URL_PATH' : 'NAVIGATION')
+      }).catch(() => {});
+    }
+  } catch (err) {}
+}
+
+/**
+ * Detects if a form is a login / sign-in form (as opposed to a registration form).
+ * Uses ONLY safe DOM metadata (button labels, headings, form attributes).
+ * NEVER reads input values, passwords, or PII.
+ */
+function isLoginForm(form) {
+  if (!form) return false;
+
+  const action = (form.action || '').toLowerCase();
+  const id = (form.id || '').toLowerCase();
+  const className = (form.className || '').toLowerCase();
+
+  const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]'));
+  const buttonText = buttons.map(b => (b.innerText || b.value || '').toLowerCase()).join(' ');
+  const formSummary = (form.innerText || '').substring(0, 300).toLowerCase();
+
+  const fullStr = `${action} ${id} ${className} ${buttonText} ${formSummary}`;
+
+  // If registration keywords exist, it's a registration form, not a login form
+  if (fullStr.includes('signup') || fullStr.includes('sign up') || fullStr.includes('register') || fullStr.includes('create account') || fullStr.includes('join')) {
+    return false;
+  }
+
+  const loginKeywords = [
+    'login', 'log in', 'log-in', 'signin', 'sign in', 'sign-in',
+    'auth', 'authenticate', 'login.php', 'signin.html', 'user_login'
+  ];
+
+  return loginKeywords.some(kw => fullStr.includes(kw));
+}
+
+/**
+ * Checks for successful login confirmation signals.
+ * Uses ONLY safe metadata and navigation signals.
+ * NEVER reads or inspects credential values.
+ */
+function checkForLoginConfirmation() {
+  try {
+    const rawPending = sessionStorage.getItem('reclaim_pending_login');
+    if (!rawPending) return;
+
+    const pending = JSON.parse(rawPending);
+    const now = Date.now();
+
+    // Expire pending login token after 2 minutes
+    if (now - pending.timestamp > 120000) {
+      sessionStorage.removeItem('reclaim_pending_login');
+      return;
+    }
+
+    const domain = normalizeDomain(window.location.hostname);
+    if (domain !== pending.domain) return;
+
+    const href = window.location.href.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+
+    // Check for login error messages on page (e.g. failed login attempt)
+    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().substring(0, 2000);
+    const hasLoginError = [
+      'invalid password', 'incorrect password', 'wrong password',
+      'invalid credentials', 'login failed', 'authentication failed',
+      'user not found', 'invalid email'
+    ].some(err => bodyText.includes(err));
+
+    if (hasLoginError) {
+      sessionStorage.removeItem('reclaim_pending_login');
+      return;
+    }
+
+    // Check 1: Post-login URLs / paths
+    const isLoginSuccessUrl = [
+      '/dashboard', '/home', '/feed', '/user', '/account',
+      '/profile', '/overview', '/welcome', '/main', '/portal'
+    ].some(p => path.includes(p) || href.includes(p)) || (!href.includes('login') && !href.includes('signin'));
+
+    // Check 2: DOM confirmation messages / indicators
+    const isLoginSuccessText = [
+      'welcome back', 'logged in', 'sign out', 'logout',
+      'my account', 'user profile', 'signed in as'
+    ].some(kw => bodyText.includes(kw));
+
+    // Check 3: Post-submit navigation away from login page
+    const isPostSubmitNav = document.referrer && document.referrer !== window.location.href && (document.referrer.includes('login') || document.referrer.includes('signin'));
+
+    if (isLoginSuccessUrl || isLoginSuccessText || isPostSubmitNav) {
+      sessionStorage.removeItem('reclaim_pending_login');
+
+      const sessionConfirmedKey = 'reclaim_confirmed_login_' + pending.eventId;
+      if (sessionStorage.getItem(sessionConfirmedKey)) return;
+      sessionStorage.setItem(sessionConfirmedKey, '1');
+
+      // Trigger 30-second automatic overlay display on successful login!
+      triggerAutomaticOverlay();
+    }
+  } catch (err) {}
+}
+
+/**
  * Intercepts form submission and sends sanitized exposure metadata only.
  */
 function handleFormSubmit(form) {
@@ -167,6 +371,27 @@ function handleFormSubmit(form) {
 
   const dataTypes = detectDataCategories(inputs);
   const consents = detectConsentCategories(inputs);
+
+  // Registration & Login flow detection
+  if (isRegistrationForm(form)) {
+    const regToken = {
+      domain: normalizeDomain(window.location.hostname),
+      timestamp: Date.now(),
+      eventId: 'reg_' + Math.random().toString(36).substring(2, 11)
+    };
+    try {
+      sessionStorage.setItem('reclaim_pending_registration', JSON.stringify(regToken));
+    } catch (e) {}
+  } else if (isLoginForm(form)) {
+    const loginToken = {
+      domain: normalizeDomain(window.location.hostname),
+      timestamp: Date.now(),
+      eventId: 'login_' + Math.random().toString(36).substring(2, 11)
+    };
+    try {
+      sessionStorage.setItem('reclaim_pending_login', JSON.stringify(loginToken));
+    } catch (e) {}
+  }
 
   // Send payload only if relevant exposure data types or consents were detected
   if (dataTypes.length > 0 || consents.length > 0) {
@@ -211,6 +436,14 @@ document.addEventListener('submit', (e) => {
   }
 }, true);
 
+// Check for registration and login confirmation on load and SPA navigation
+checkForRegistrationConfirmation();
+checkForLoginConfirmation();
+window.addEventListener('load', () => {
+  checkForRegistrationConfirmation();
+  checkForLoginConfirmation();
+});
+
 // Passively notify background script of website page navigation (for Recent Website Activity tracking)
 if (window.location.protocol.startsWith('http')) {
   const currentDomain = normalizeDomain(window.location.hostname);
@@ -227,7 +460,6 @@ if (window.location.protocol.startsWith('http')) {
     });
   }
 }
-
 // Message bus listener for DOM tracking queries
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === 'CHECK_BEHAVIORAL_TRACKING') {
@@ -270,8 +502,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  // Track current URL for SPA detection
+  // Track current URL and normalized domain for SPA detection and same-domain path filtering
   let _lastOverlayUrl = window.location.href;
+  let _lastOverlayDomain = '';
 
   // We store a reference to the shadow root since mode:'closed' doesn't expose it
   let _shadowRef = null;
@@ -712,11 +945,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   }
 
-  function renderExposureOverview(shadow, exposures) {
+  function renderExposureOverview(shadow, exposures, storageData) {
     const records = Object.values(exposures || {});
 
-    const totalWebsites = records.length;
-    const totalExposures = records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
+    const visitedWebsites = (storageData && storageData.visitedWebsites) || [];
+    const totalWebsites = (storageData && typeof storageData.webCount === 'number')
+      ? storageData.webCount
+      : (visitedWebsites.length || Object.keys(exposures || {}).length);
+
+    const exposureCount = (storageData && typeof storageData.exposureCount === 'number')
+      ? storageData.exposureCount
+      : records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
     const highRiskCount = records.filter(r => r.riskLevel === 'high').length;
 
     const statWebsites = shadow.getElementById('stat-websites');
@@ -725,7 +964,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const scoreBadge = shadow.getElementById('privacy-score-badge');
 
     if (statWebsites) statWebsites.textContent = totalWebsites;
-    if (statAccounts) statAccounts.textContent = totalExposures;
+    if (statAccounts) statAccounts.textContent = exposureCount;
     if (statHighRisk) statHighRisk.textContent = highRiskCount;
 
     // Calculate and update score
@@ -789,21 +1028,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   function refreshOverlayUI() {
     if (!_shadowRef) return;
 
-    chrome.runtime.sendMessage({ type: 'GET_SITE_DATA', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
+    chrome.runtime.sendMessage({ type: 'GET_EXTENSION_STATE', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
       if (chrome.runtime.lastError || !_shadowRef) return;
 
       const siteData = response || {};
       const allExposures = siteData.exposures || {};
       const isDemo = siteData.demoMode || false;
 
-      // Get recent visits from storage (same as popup.js)
-      chrome.storage.local.get(['recentWebsiteVisits'], (storage) => {
-        if (chrome.runtime.lastError || !_shadowRef) return;
-
-        let visits = storage.recentWebsiteVisits || [];
-        if (!isDemo) {
-          visits = visits.filter(v => !v.isDemo);
-        }
+      let visits = siteData.recentWebsiteVisits || [];
+      if (!isDemo) {
+        visits = visits.filter(v => !v.isDemo);
+      }
 
         // Active Tab State Machine — using window.location (content script knows the page)
         const activeTabState = {
@@ -843,17 +1078,93 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Render Overall Overview Metrics & Privacy Score
-        renderExposureOverview(_shadowRef, allExposures);
+        renderExposureOverview(_shadowRef, allExposures, siteData);
 
         // Render Recent Website Activity List
         renderRecentVisits(_shadowRef, visits);
-      });
+
+        // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
+        if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) {
+          const syncPayload = {
+            type: 'RECLAIM_EXTENSION_SYNC',
+            eventId: 'sync_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            timestamp: new Date().toISOString(),
+            webCount: siteData.webCount || 0,
+            exposureCount: siteData.exposureCount || 0,
+            visitedWebsites: siteData.visitedWebsites || [],
+            exposures: siteData.exposures || {},
+            recentWebsiteVisits: visits || [],
+            privacyScore: calculatePrivacyScore(siteData.exposures),
+            childSafeMode: isChildSafe,
+            isExtensionActive: true
+          };
+          try {
+            window.postMessage(syncPayload, '*');
+            window.localStorage.setItem('reclaim_extension_sync', JSON.stringify(syncPayload));
+            window.dispatchEvent(new CustomEvent('reclaim_extension_sync_event', { detail: syncPayload }));
+          } catch (e) {}
+        }
     });
   }
+
+  // Listen for explicit Dashboard sync requests
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'REQUEST_EXTENSION_SYNC') {
+      refreshOverlayUI();
+    }
+  });
 
   // -------------------------------------------------------
   // Overlay injection
   // -------------------------------------------------------
+
+  let _automaticOverlayTimer = null;
+
+  /**
+   * Automatically triggers/refreshes the in-page Shadow DOM overlay and starts/resets the 30-second timer.
+   */
+  function triggerAutomaticOverlay() {
+    const domain = overlayNormalizeDomain(window.location.hostname);
+    if (!domain || domain === 'unknown' || isExcludedPage() || isDismissed(domain)) {
+      return;
+    }
+
+    _lastOverlayDomain = domain;
+
+    injectOverlay();
+
+    const host = document.getElementById(OVERLAY_HOST_ID);
+    if (host) {
+      host.style.display = 'block';
+    }
+
+    refreshOverlayUI();
+
+    if (_automaticOverlayTimer) {
+      clearTimeout(_automaticOverlayTimer);
+      _automaticOverlayTimer = null;
+    }
+
+    _automaticOverlayTimer = setTimeout(() => {
+      hideAutomaticOverlay();
+    }, 30000);
+  }
+
+  /**
+   * Automatically hides the in-page overlay after 30 seconds.
+   * Modifies ONLY UI visibility. Does NOT delete data, reset webCount/exposureCount, or alter persistent state.
+   */
+  function hideAutomaticOverlay() {
+    if (_automaticOverlayTimer) {
+      clearTimeout(_automaticOverlayTimer);
+      _automaticOverlayTimer = null;
+    }
+
+    const host = document.getElementById(OVERLAY_HOST_ID);
+    if (host) {
+      host.style.display = 'none';
+    }
+  }
 
   function injectOverlay() {
     const domain = overlayNormalizeDomain(window.location.hostname);
@@ -893,9 +1204,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         setDismissed(domain);
-        const hostEl = document.getElementById(OVERLAY_HOST_ID);
-        if (hostEl) hostEl.remove();
-        _shadowRef = null;
+        hideAutomaticOverlay();
       });
     }
 
@@ -913,6 +1222,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   function removeOverlay() {
+    hideAutomaticOverlay();
     const existing = document.getElementById(OVERLAY_HOST_ID);
     if (existing) existing.remove();
     _shadowRef = null;
@@ -923,15 +1233,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------------------------------------------
 
   function handleUrlChange() {
+    const currentDomain = overlayNormalizeDomain(window.location.hostname);
     const currentUrl = window.location.href;
+
     if (currentUrl === _lastOverlayUrl) return;
     _lastOverlayUrl = currentUrl;
 
-    // Remove existing overlay (domain may have changed)
+    // Do NOT re-trigger automatic overlay on same-domain URL/path changes
+    if (currentDomain === _lastOverlayDomain) {
+      return;
+    }
+
+    _lastOverlayDomain = currentDomain;
+
+    // Remove existing overlay for previous domain
     removeOverlay();
 
-    // Re-inject for new URL after a brief settling delay
-    setTimeout(() => injectOverlay(), 300);
+    // Re-inject & start 30s timer for new domain after a brief settling delay
+    setTimeout(() => triggerAutomaticOverlay(), 300);
   }
 
   // popstate (back/forward)
@@ -964,21 +1283,113 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------------------------------------------
   // Listen for live data updates from background
   // -------------------------------------------------------
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message && message.type === 'OVERLAY_DATA_UPDATE') {
       refreshOverlayUI();
+    } else if (message && message.type === 'GET_DOM_METADATA') {
+      try {
+        const metaDesc = document.querySelector('meta[name="description"]')?.content || 
+                         document.querySelector('meta[property="og:description"]')?.content || 
+                         document.querySelector('meta[property="twitter:description"]')?.content || '';
+        
+        const headings = Array.from(document.querySelectorAll('h1, h2'))
+          .slice(0, 3)
+          .map(h => h.innerText.trim())
+          .filter(t => t.length > 0);
+          
+        sendResponse({
+          title: document.title || '',
+          metaDescription: metaDesc || '',
+          headings: headings || []
+        });
+      } catch (err) {
+        sendResponse({ title: document.title || '', metaDescription: '', headings: [] });
+      }
+      return true;
     }
   });
 
   // -------------------------------------------------------
-  // Initial display
+  // Initial display — triggers 30s automatic overlay
   // -------------------------------------------------------
   if (document.readyState === 'complete') {
-    setTimeout(injectOverlay, 400);
+    setTimeout(triggerAutomaticOverlay, 400);
   } else {
     window.addEventListener('load', () => {
-      setTimeout(injectOverlay, 400);
+      setTimeout(triggerAutomaticOverlay, 400);
     });
   }
 
 })();
+
+// --- SHARED AUTHENTICATION SYNC WITH WEB DASHBOARD ---
+function checkIsDashboard() {
+  return window.location.port === '5173' || 
+         window.location.hostname === 'localhost' || 
+         window.location.hostname === '127.0.0.1' ||
+         (document.title && document.title.includes('PrivacyLens'));
+}
+
+// Listen for active queries from page (registered unconditionally)
+window.addEventListener('message', async (event) => {
+  const message = event.data;
+  if (message && message.direction === 'from-page') {
+    console.log('[RECLAIM Content Script] Received message from page:', message);
+    if (!checkIsDashboard()) {
+      console.log('[RECLAIM Content Script] checkIsDashboard failed for:', window.location.href);
+      return;
+    }
+
+    if (message.type === 'GetExtensionSession') {
+      try {
+        const data = await chrome.storage.local.get(['session']);
+        console.log('[RECLAIM Content Script] Sending ExtensionSessionResponse:', data.session);
+        window.postMessage({
+          direction: 'from-content-script',
+          type: 'ExtensionSessionResponse',
+          detail: data.session || null
+        }, '*');
+      } catch (err) {
+        console.error('Failed to get session from extension:', err);
+      }
+    } else if (message.type === 'SetExtensionSession') {
+      try {
+        if (message.detail) {
+          console.log('[RECLAIM Content Script] Saving session to storage:', message.detail);
+          await chrome.storage.local.set({ session: message.detail });
+        }
+      } catch (err) {
+        console.error('Failed to save session in extension:', err);
+      }
+    } else if (message.type === 'ClearExtensionSession') {
+      try {
+        console.log('[RECLAIM Content Script] Clearing session from storage');
+        await chrome.storage.local.remove(['session']);
+      } catch (err) {
+        console.error('Failed to clear session in extension:', err);
+      }
+    } else if (message.type === 'PingExtension') {
+      console.log('[RECLAIM Content Script] Received PingExtension, replying with PongExtension...');
+      window.postMessage({
+        direction: 'from-content-script',
+        type: 'PongExtension'
+      }, '*');
+    }
+  }
+});
+
+// Startup Broadcast: Immediately push current session state to avoid race conditions
+(async () => {
+  if (!checkIsDashboard()) return;
+  try {
+    const data = await chrome.storage.local.get(['session']);
+    window.postMessage({
+      direction: 'from-content-script',
+      type: 'ExtensionSessionResponse',
+      detail: data.session || null
+    }, '*');
+  } catch (err) {
+    console.error('Failed to broadcast initial session on load:', err);
+  }
+})();
+

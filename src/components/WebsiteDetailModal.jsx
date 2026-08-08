@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, ShieldAlert, Zap, ExternalLink, FileText, Sparkles, Eye, CheckCircle2, AlertTriangle, ArrowRight, Lock, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldAlert, Zap, ExternalLink, FileText, Sparkles, Eye, CheckCircle2, AlertTriangle, ArrowRight, Lock, RefreshCw, ShieldCheck } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
+import { generateVerifiedFacts } from '../utils/websiteFacts';
 
 export const WebsiteDetailModal = () => {
   const {
@@ -14,25 +15,40 @@ export const WebsiteDetailModal = () => {
 
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiSummary, setShowAiSummary] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('EN'); // 'EN', 'HI', 'TE'
+  const [verifiedFacts, setVerifiedFacts] = useState({ bullets: [], isAvailable: false });
 
+  // Guard: must be before any hook that depends on site
   if (activeModal !== 'DETAIL' || !selectedWebsite) return null;
-
   const site = selectedWebsite;
 
   const getRiskBadge = (risk) => {
     switch (risk) {
-      case 'High': return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
+      case 'High':   return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
       case 'Medium': return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
-      default: return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+      default:       return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
     }
   };
 
+  // Re-derive facts whenever site or language changes
   const handleGenerateAiSummary = () => {
     setAiLoading(true);
+    // Simulate brief AI "analysis" delay then derive facts from site data
     setTimeout(() => {
+      const result = generateVerifiedFacts(site, selectedLanguage);
+      setVerifiedFacts(result);
       setAiLoading(false);
       setShowAiSummary(true);
-    }, 800);
+    }, 700);
+  };
+
+  // Regenerate in-place when user switches language (if summary already shown)
+  const handleLanguageSwitch = (lang) => {
+    setSelectedLanguage(lang);
+    if (showAiSummary) {
+      const result = generateVerifiedFacts(site, lang);
+      setVerifiedFacts(result);
+    }
   };
 
   return (
@@ -122,44 +138,84 @@ export const WebsiteDetailModal = () => {
           </div>
         </div>
 
-        {/* Section 3: AI Policy Summarizer */}
+        {/* Section 3: AI Policy Summarizer — Strict Factual Mode */}
         <div className="mb-6 p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/30">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-indigo-400" />
               <span className="text-xs font-bold text-indigo-200">Plain-Language AI Policy Summary</span>
             </div>
-            
+
+            {/* Language switcher — always visible once summary is shown */}
+            {showAiSummary && (
+              <div className="flex items-center space-x-1 bg-indigo-900/40 p-0.5 rounded-lg border border-indigo-500/25 text-[10px] font-bold">
+                {['EN', 'HI', 'TE'].map(lang => (
+                  <button
+                    key={lang}
+                    onClick={() => handleLanguageSwitch(lang)}
+                    className={`px-1.5 py-0.5 rounded transition-all ${
+                      selectedLanguage === lang
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-indigo-200 hover:text-white'
+                    }`}
+                  >
+                    {lang}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Summarize button — only shown before summary is generated */}
             {!showAiSummary && (
               <button
                 onClick={handleGenerateAiSummary}
                 disabled={aiLoading}
-                className="text-xs font-semibold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-slate-900 transition-all flex items-center space-x-1"
+                className="text-xs font-semibold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-all flex items-center space-x-1 disabled:opacity-60"
               >
                 {aiLoading ? (
                   <>
                     <RefreshCw className="w-3 h-3 animate-spin mr-1" />
-                    <span>Analyzing Terms...</span>
+                    <span>Analyzing...</span>
                   </>
                 ) : (
-                  <>
-                    <span>✨ Summarize Terms</span>
-                  </>
+                  <span>✨ Summarize Terms</span>
                 )}
               </button>
             )}
           </div>
 
+          {/* Summary output */}
           {showAiSummary ? (
-            <div className="mt-3 text-xs text-indigo-100/90 leading-relaxed font-sans bg-indigo-900/20 p-3 rounded-xl border border-indigo-500/20">
-              <p className="font-medium text-slate-800 mb-2">{site.aiSummary}</p>
-              <ul className="space-y-1 text-slate-700 pl-4 list-disc">
-                <li>Data stored in domestic & cloud data centers.</li>
-                <li>DPDP §6 withdrawal available via privacy rights officer.</li>
-              </ul>
+            <div className="mt-3 bg-indigo-900/20 p-3 rounded-xl border border-indigo-500/20">
+
+              {/* Strict Factual Mode badge */}
+              <div className="flex items-center space-x-1.5 mb-3">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                  Strict Factual Mode — {site.name} ({site.domain}) only
+                </span>
+              </div>
+
+              {/* Verified bullet points */}
+              {verifiedFacts.isAvailable ? (
+                <ul className="space-y-2">
+                  {verifiedFacts.bullets.map((bullet, idx) => (
+                    <li key={idx} className="flex items-start space-x-2 text-xs text-indigo-100/90 leading-relaxed">
+                      <span className="text-indigo-400 font-bold mt-0.5 shrink-0">•</span>
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs font-bold text-amber-400 tracking-wide">
+                  {verifiedFacts.bullets[0]}
+                </p>
+              )}
             </div>
           ) : (
-            <p className="text-xs text-slate-600">Click summarize to get a 2-sentence plain English breakdown of {site.name}'s legal policy.</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Click <span className="font-semibold text-indigo-300">Summarize Terms</span> to get verified factual bullet points about <span className="font-semibold">{site.name}</span>.
+            </p>
           )}
         </div>
 
@@ -181,7 +237,7 @@ export const WebsiteDetailModal = () => {
               </div>
               <button
                 onClick={() => triggerTier1Revoke(site, 'All Consents')}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-slate-900 font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center space-x-1.5 shrink-0"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center space-x-1.5 shrink-0"
               >
                 <Zap className="w-4 h-4" />
                 <span>Execute Direct Revoke</span>
@@ -201,7 +257,7 @@ export const WebsiteDetailModal = () => {
               </div>
               <button
                 onClick={() => triggerTier2Guided(site)}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-900 font-bold text-xs shadow-lg shadow-cyan-600/30 transition-all flex items-center justify-center space-x-1.5 shrink-0"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg shadow-cyan-600/30 transition-all flex items-center justify-center space-x-1.5 shrink-0"
               >
                 <ExternalLink className="w-4 h-4" />
                 <span>Open Guided Portal</span>
@@ -221,7 +277,7 @@ export const WebsiteDetailModal = () => {
               </div>
               <button
                 onClick={() => triggerTier3Letter(site, 'DATA_ERASURE')}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-slate-900 font-bold text-xs shadow-lg shadow-violet-600/30 transition-all flex items-center justify-center space-x-1.5 shrink-0"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-lg shadow-violet-600/30 transition-all flex items-center justify-center space-x-1.5 shrink-0"
               >
                 <FileText className="w-4 h-4" />
                 <span>Generate Legal Letter</span>

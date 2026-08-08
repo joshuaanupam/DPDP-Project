@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for real-time storage updates
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode)) {
+    if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode || changes.session)) {
       refreshUI();
     }
   });
@@ -53,6 +53,35 @@ function setupEventListeners() {
       await chrome.storage.local.set({ childSafeMode: enabled });
       chrome.runtime.sendMessage({ type: 'TOGGLE_CHILD_SAFE_MODE', enableChildSafeMode: enabled }).catch(() => {});
       refreshUI();
+    });
+  }
+
+  const btnLoginRedirect = document.getElementById('btn-login-redirect');
+  if (btnLoginRedirect) {
+    btnLoginRedirect.addEventListener('click', () => {
+      chrome.tabs.create({ url: 'http://localhost:5173' });
+    });
+  }
+
+  const btnRefreshBrief = document.getElementById('btn-refresh-brief');
+  if (btnRefreshBrief) {
+    btnRefreshBrief.addEventListener('click', async () => {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.url && !isInternalUrl(activeTab.url)) {
+          const urlObj = new URL(activeTab.url);
+          const domain = normalizeDomain(urlObj.hostname);
+          const activeTabState = {
+            domain: domain,
+            url: activeTab.url,
+            title: activeTab.title || urlObj.hostname,
+            status: 'success'
+          };
+          await loadWebsiteBrief(activeTabState, activeTab.id, true);
+        }
+      } catch (err) {
+        console.error('Refresh brief click error:', err);
+      }
     });
   }
 }
@@ -105,35 +134,22 @@ function calculatePrivacyScore(exposuresObj) {
 }
 
 /**
- * Main UI refresh loop - Single Source of Truth from active browser tab
+ * Main UI refresh loop — Requests Authoritative Single Source of Truth from background.js
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode']);
-  const allExposures = storage.exposures || {};
-  let visits = storage.recentWebsiteVisits || [];
-  const isDemo = storage.demoMode || false;
-  const isChildSafe = storage.childSafeMode || false;
-
-  // Update Child Safe Mode toggle UI
-  const toggleChildSafe = document.getElementById('toggle-child-safe');
-  if (toggleChildSafe) {
-    toggleChildSafe.checked = isChildSafe;
+  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'session']);
+  
+  // Verify user is authenticated before showing metrics
+  const lockOverlay = document.getElementById('lock-overlay');
+  if (!storage.session) {
+    if (lockOverlay) lockOverlay.style.display = 'flex';
+    document.getElementById('privacy-score-badge').textContent = 'Locked';
+    document.getElementById('privacy-score-badge').style.borderColor = '#64748b';
+    return;
   }
+  if (lockOverlay) lockOverlay.style.display = 'none';
 
-  // Filter exposure records and visits based on Demo Mode isolation
-  const activeExposures = {};
-  Object.keys(allExposures).forEach(domainKey => {
-    const record = allExposures[domainKey];
-    if (isDemo || !record.isDemo) {
-      activeExposures[domainKey] = record;
-    }
-  });
-
-  if (!isDemo) {
-    visits = visits.filter(v => !v.isDemo);
-  }
-
-  // Active Tab State Machine
+  // Determine active tab details first
   let activeTabState = {
     status: 'loading', // loading | detected | analyzing | success | unsupported-page | error
     domain: '',
@@ -166,12 +182,48 @@ async function refreshUI() {
     activeTabState.status = 'error';
   }
 
+  // Request authoritative single source of truth state from background.js
+  let extState = null;
+  try {
+    extState = await chrome.runtime.sendMessage({
+      type: 'GET_EXTENSION_STATE',
+      domain: activeTabState.domain
+    });
+  } catch (e) {
+    extState = null;
+  }
+
+  // Fallback to local storage if background worker response is empty
+  if (!extState) {
+    const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'visitedWebsites', 'webCount', 'exposureCount']);
+    const visitedArr = storage.visitedWebsites || [];
+    extState = {
+      webCount: typeof storage.webCount === 'number' ? storage.webCount : visitedArr.length,
+      exposureCount: typeof storage.exposureCount === 'number' ? storage.exposureCount : Object.keys(storage.exposures || {}).length,
+      visitedWebsites: visitedArr,
+      recentWebsiteVisits: storage.recentWebsiteVisits || [],
+      exposures: storage.exposures || {},
+      siteExposure: activeTabState.domain ? (storage.exposures || {})[activeTabState.domain] || null : null,
+      demoMode: storage.demoMode || false,
+      childSafeMode: storage.childSafeMode || false
+    };
+  }
+
+  const activeExposures = extState.exposures || {};
+  let visits = extState.recentWebsiteVisits || [];
+  const isChildSafe = extState.childSafeMode || false;
+
+  // Update Child Safe Mode toggle UI
+  const toggleChildSafe = document.getElementById('toggle-child-safe');
+  if (toggleChildSafe) {
+    toggleChildSafe.checked = isChildSafe;
+  }
+
   // Check webpage for indicators of behavioral tracking or targeted ads (§9)
   let hasBehavioralTracking = false;
 
-  const currentExposure = activeExposures[activeTabState.domain];
+  const currentExposure = extState.siteExposure || activeExposures[activeTabState.domain];
   if (currentExposure) {
-    // Check if recorded consent types include marketing/promotional or if risk reasons indicate tracking
     if ((currentExposure.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
       hasBehavioralTracking = true;
     }
@@ -196,11 +248,14 @@ async function refreshUI() {
   // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
   renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
 
-  // Render Overall Overview Metrics & Privacy Score
-  renderExposureOverview(activeExposures);
+  // Render Overall Overview Metrics & Privacy Score (Passing extState as storageData)
+  renderExposureOverview(activeExposures, extState);
 
   // Render Recent Website Activity List (rolling 5 most recently visited unique domains)
   renderRecentVisits(visits);
+
+  // Load and Render Website Brief Feature
+  await loadWebsiteBrief(activeTabState, activeTabId);
 }
 
 /**
@@ -299,15 +354,21 @@ function renderCurrentSite(activeTabState, siteExposure) {
 /**
  * Renders digital exposure metrics & calculated privacy score
  */
-function renderExposureOverview(exposures) {
+function renderExposureOverview(exposures, storageData) {
   const records = Object.values(exposures || {});
   
-  const totalWebsites = records.length;
-  const totalExposures = records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
+  const visitedWebsites = (storageData && storageData.visitedWebsites) || [];
+  const totalWebsites = (storageData && typeof storageData.webCount === 'number')
+    ? storageData.webCount
+    : (visitedWebsites.length || Object.keys(exposures || {}).length);
+
+  const exposureCount = (storageData && typeof storageData.exposureCount === 'number')
+    ? storageData.exposureCount
+    : records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
   const highRiskCount = records.filter(r => r.riskLevel === 'high').length;
 
   document.getElementById('stat-websites').textContent = totalWebsites;
-  document.getElementById('stat-accounts').textContent = totalExposures;
+  document.getElementById('stat-accounts').textContent = exposureCount;
   document.getElementById('stat-high-risk').textContent = highRiskCount;
 
   // Calculate and update score
@@ -364,4 +425,93 @@ function renderRecentVisits(visits) {
 
     listEl.appendChild(item);
   });
+}
+
+/**
+ * Loads, caches, and renders the AI-powered Website Brief.
+ * Uses message passing to fetch DOM metadata from content script,
+ * then fetches from backend controller and caches in local storage.
+ */
+async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = false) {
+  const card = document.getElementById('website-brief-card');
+  const siteTitle = document.getElementById('brief-site-title');
+  const textEl = document.getElementById('brief-text');
+
+  if (!card || !siteTitle || !textEl) return;
+
+  // 1. Safe visibility guard: Hide brief card on loading, internal, or error tab states
+  if (activeTabState.status !== 'success' || !activeTabState.domain) {
+    card.style.display = 'none';
+    return;
+  }
+
+  const domain = activeTabState.domain;
+  card.style.display = 'block';
+
+  // 2. Local Storage Cache Check
+  const storage = await chrome.storage.local.get('websiteBriefs');
+  const briefs = storage.websiteBriefs || {};
+
+  if (briefs[domain] && !forceRefresh) {
+    siteTitle.textContent = briefs[domain].siteName || domain;
+    textEl.textContent = briefs[domain].brief;
+    return;
+  }
+
+  // 3. Initiate summary fetch
+  siteTitle.textContent = domain;
+  textEl.innerHTML = '🔄 <span style="color: #64748b; font-style: italic;">Generating AI summary...</span>';
+
+  // Extract metadata (title, headings, descriptions) using content script message passing
+  let domMetadata = {
+    title: activeTabState.title,
+    metaDescription: '',
+    headings: []
+  };
+
+  if (activeTabId) {
+    try {
+      const response = await chrome.tabs.sendMessage(activeTabId, { type: 'GET_DOM_METADATA' }).catch(() => null);
+      if (response) {
+        domMetadata = response;
+      }
+    } catch (e) {
+      console.warn('Could not contact content script for DOM metadata:', e.message);
+    }
+  }
+
+  // Submit to backend API securely (protects Gemini API key on the backend)
+  try {
+    const apiResponse = await fetch('http://localhost:5000/api/ai/website-brief', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        domain: domain,
+        title: domMetadata.title || activeTabState.title,
+        metaDescription: domMetadata.metaDescription || '',
+        headings: domMetadata.headings || []
+      })
+    });
+
+    const data = await apiResponse.json();
+    if (data && data.success) {
+      // Update Cache
+      briefs[domain] = {
+        siteName: data.siteName,
+        brief: data.brief
+      };
+      await chrome.storage.local.set({ websiteBriefs: briefs });
+
+      // Display
+      siteTitle.textContent = data.siteName || domain;
+      textEl.textContent = data.brief;
+    } else {
+      textEl.textContent = data.brief || 'Unable to generate a reliable website summary.';
+    }
+  } catch (err) {
+    console.error('Error fetching website brief:', err);
+    textEl.textContent = 'Website summary unavailable.';
+  }
 }
