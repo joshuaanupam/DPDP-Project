@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PrivacyLens API Contracts & Schemas",
+  "version": "1.0.0",
+  "lastUpdated": "2026-08-08T13:00:00Z",
+  "description": "Locked Single Source of Truth API Contracts for PrivacyLens DPDP Platform (TM1 Owned).",
+  "definitions": {
+    "Enums": {
+      "ConsentType": [
+        "Account Creation",
+        "Marketing Emails",
+        "3rd-Party Ads",
+        "Behavioral Tracking",
+        "Location Access",
+        "Newsletter"
+      ],
+      "ConsentStatus": [
+        "ACTIVE",
+        "REVOKED"
+      ],
+      "RiskLevel": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "DeletionTier": [
+        1,
+        2,
+        3
+      ],
+      "RequestType": [
+        "CONSENT_REVOCATION",
+        "DATA_ERASURE",
+        "ACCOUNT_DELETION"
+      ],
+      "RequestStatus": [
+        "SUBMITTED",
+        "AWAITING_RESPONSE",
+        "COMPLETED",
+        "FAILED"
+      ],
+      "AuditAction": [
+        "EVENT_DETECTED",
+        "CONSENT_GRANTED",
+        "CONSENT_REVOKED",
+        "DELETION_REQUESTED",
+        "NOTICE_GENERATED"
+      ]
+    }
+  },
+  "endpoints": {
+    "postEvents": {
+      "method": "POST",
+      "path": "/api/events",
+      "description": "Chrome MV3 Extension emits detected form signup/consent metadata to backend.",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "request": {
+        "type": "object",
+        "required": ["userId", "domain", "siteName", "detectedFields", "consents", "timestamp"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "example": "usr_12345"
+          },
+          "domain": {
+            "type": "string",
+            "example": "shopease.com"
+          },
+          "siteName": {
+            "type": "string",
+            "example": "ShopEase"
+          },
+          "detectedFields": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["Email", "Phone", "Name"]
+          },
+          "consents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["consentType", "granted"],
+              "properties": {
+                "consentType": {
+                  "type": "string",
+                  "example": "Marketing Emails"
+                },
+                "granted": {
+                  "type": "boolean",
+                  "example": true
+                }
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-08-08T11:30:00Z"
+          }
+        }
+      },
+      "responses": {
+        "201": {
+          "description": "Event logged and score updated",
+          "body": {
+            "type": "object",
+            "required": ["success", "eventId", "updatedPrivacyScore", "websiteId"],
+            "properties": {
+              "success": { "type": "boolean", "example": true },
+              "eventId": { "type": "string", "example": "evt_998877" },
+              "updatedPrivacyScore": { "type": "integer", "minimum": 0, "maximum": 100, "example": 72 },
+              "websiteId": { "type": "string", "example": "web_shopease" },
+              "message": { "type": "string", "example": "Privacy event recorded successfully." }
+            }
+          }
+        },
+        "400": {
+          "description": "Invalid payload format or missing required fields",
+          "body": {
+            "type": "object",
+            "properties": {
+              "success": { "type": "boolean", "example": false },
+              "error": { "type": "string", "example": "Missing required fields: userId, domain, consents" }
+            }
+          }
+        }
+      }
+    },
+    "getDashboard": {
+      "method": "GET",
+      "path": "/api/dashboard/:userId",
+      "description": "Central React Web Dashboard fetches user footprint, stats, website cards, and privacy score.",
+      "parameters": {
+        "userId": {
+          "in": "path",
+          "required": true,
+          "type": "string",
+          "example": "usr_12345"
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Consolidated dashboard dataset",
+          "body": {
+            "type": "object",
+            "required": ["user", "stats", "websites"],
+            "properties": {
+              "user": {
+                "type": "object",
+                "required": ["name", "email", "privacyScore"],
+                "properties": {
+                  "id": { "type": "string", "example": "usr_12345" },
+                  "name": { "type": "string", "example": "Joshua" },
+                  "email": { "type": "string", "example": "joshua@example.com" },
+                  "privacyScore": { "type": "integer", "minimum": 0, "maximum": 100, "example": 72 },
+                  "scoreBand": { "type": "string", "example": "Good" }
+                }
+              },
+              "stats": {
+                "type": "object",
+                "required": ["totalWebsites", "activeConsents", "pendingRequests", "revokedConsents"],
+                "properties": {
+                  "totalWebsites": { "type": "integer", "example": 12 },
+                  "activeConsents": { "type": "integer", "example": 18 },
+                  "pendingRequests": { "type": "integer", "example": 2 },
+                  "revokedConsents": { "type": "integer", "example": 5 },
+                  "highRiskWebsites": { "type": "integer", "example": 2 }
+                }
+              },
+              "websites": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "domain", "name", "riskLevel", "deletionTier", "dataItems", "activeConsents"],
+                  "properties": {
+                    "id": { "type": "string", "example": "web_shopease" },
+                    "domain": { "type": "string", "example": "shopease.com" },
+                    "name": { "type": "string", "example": "ShopEase" },
+                    "riskLevel": { "type": "string", "enum": ["Low", "Medium", "High"], "example": "Medium" },
+                    "deletionTier": { "type": "integer", "enum": [1, 2, 3], "example": 1 },
+                    "deletionUrl": { "type": "string", "example": "https://shopease.com/account/privacy" },
+                    "privacyOfficerEmail": { "type": "string", "example": "dpo@shopease.com" },
+                    "dataItems": { "type": "array", "items": { "type": "string" }, "example": ["Email", "Phone", "Name"] },
+                    "activeConsents": { "type": "array", "items": { "type": "string" }, "example": ["Account Creation", "Marketing Emails"] },
+                    "revokedConsents": { "type": "array", "items": { "type": "string" }, "example": [] },
+                    "accountCreatedAt": { "type": "string", "format": "date-time", "example": "2026-08-08T11:30:00Z" },
+                    "aiSummary": {
+                      "type": "string",
+                      "example": "• Collects name, email, and phone for account management and personalized offers.\n• Retains purchase history until account deletion; allows DPDP Section 6 consent revocation."
+                    }
+                  }
+                }
+              },
+              "recentRequests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "example": "req_554433" },
+                    "websiteName": { "type": "string", "example": "ShopEase" },
+                    "requestType": { "type": "string", "example": "CONSENT_REVOCATION" },
+                    "status": { "type": "string", "example": "COMPLETED" },
+                    "methodUsed": { "type": "string", "example": "TIER1_DIRECT_API" },
+                    "createdAt": { "type": "string", "format": "date-time", "example": "2026-08-08T12:00:00Z" }
+                  }
+                }
+              },
+              "auditLogs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "example": "aud_112233" },
+                    "websiteName": { "type": "string", "example": "ShopEase" },
+                    "action": { "type": "string", "example": "CONSENT_REVOKED" },
+                    "description": { "type": "string", "example": "Revoked Marketing Emails consent via Direct API." },
+                    "timestamp": { "type": "string", "format": "date-time", "example": "2026-08-08T12:00:01Z" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "404": {
+          "description": "User profile not found",
+          "body": {
+            "type": "object",
+            "properties": {
+              "success": { "type": "boolean", "example": false },
+              "error": { "type": "string", "example": "User not found" }
+            }
+          }
+        }
+      }
+    },
+    "postRequestsCreate": {
+      "method": "POST",
+      "path": "/api/requests/create",
+      "description": "Executes 3-Tier Consent Revocation or Data Erasure Request (Tier 1: Direct API, Tier 2: Guided URL, Tier 3: DPDP Legal Notice).",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "request": {
+        "type": "object",
+        "required": ["userId", "websiteId", "requestType", "tier"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "example": "usr_12345"
+          },
+          "websiteId": {
+            "type": "string",
+            "example": "web_shopease"
+          },
+          "requestType": {
+            "type": "string",
+            "enum": ["CONSENT_REVOCATION", "DATA_ERASURE", "ACCOUNT_DELETION"],
+            "example": "CONSENT_REVOCATION"
+          },
+          "targetConsent": {
+            "type": "string",
+            "example": "Marketing Emails"
+          },
+          "tier": {
+            "type": "integer",
+            "enum": [1, 2, 3],
+            "example": 1
+          },
+          "customNotes": {
+            "type": "string",
+            "example": "Please erase all marketing profile records under DPDP Act Section 12."
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Request processed successfully",
+          "body": {
+            "type": "object",
+            "required": ["success", "requestId", "status", "auditLogId", "message"],
+            "properties": {
+              "success": { "type": "boolean", "example": true },
+              "requestId": { "type": "string", "example": "req_554433" },
+              "status": { "type": "string", "enum": ["COMPLETED", "SUBMITTED", "AWAITING_RESPONSE"], "example": "COMPLETED" },
+              "auditLogId": { "type": "string", "example": "aud_112233" },
+              "updatedPrivacyScore": { "type": "integer", "example": 75 },
+              "message": { "type": "string", "example": "Marketing consent revoked via Tier 1 Direct API." },
+              "tierDetails": {
+                "type": "object",
+                "properties": {
+                  "tier": { "type": "integer", "example": 1 },
+                  "directApiResponse": { "type": "object" },
+                  "guidedUrl": { "type": "string" },
+                  "generatedNotice": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "400": {
+          "description": "Bad Request or Unsupported Action",
+          "body": {
+            "type": "object",
+            "properties": {
+              "success": { "type": "boolean", "example": false },
+              "error": { "type": "string", "example": "Invalid websiteId or unsupported deletion tier." }
+            }
+          }
+        }
+      }
+    },
+    "postAiSummarize": {
+      "method": "POST",
+      "path": "/api/ai/summarize-policy",
+      "description": "Translates long legal privacy terms into 2-sentence plain English bullet points with fallback.",
+      "request": {
+        "type": "object",
+        "required": ["policyText"],
+        "properties": {
+          "policyText": {
+            "type": "string",
+            "example": "ShopEase Privacy Policy: We collect email, phone number, and location..."
+          },
+          "siteName": {
+            "type": "string",
+            "example": "ShopEase"
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "AI Policy Summary",
+          "body": {
+            "type": "object",
+            "required": ["success", "summary", "bullets", "riskLevel", "isFallback"],
+            "properties": {
+              "success": { "type": "boolean", "example": true },
+              "summary": { "type": "string", "example": "• Collects name and email for order fulfillment.\n• Shares data with 3rd-party ad networks unless opted out under DPDP §6." },
+              "bullets": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "riskLevel": { "type": "string", "enum": ["Low", "Medium", "High"], "example": "Medium" },
+              "isFallback": { "type": "boolean", "example": false }
+            }
+          }
+        }
+      }
+    }
+  }
+}

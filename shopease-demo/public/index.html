@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopEase — Premium Online Shopping</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <span class="logo-icon">🛍️</span>
+        <span class="brand-name">Shop<span class="highlight">Ease</span></span>
+      </div>
+      <nav class="nav-links">
+        <a href="#products">Store</a>
+        <a href="#signup-section">Create Account</a>
+        <a href="javascript:void(0)" onclick="openPrivacyModal()">Privacy Policy</a>
+      </nav>
+      <div class="nav-actions">
+        <div class="privacy-status-pill" title="PrivacyLens MV3 Content Script active on this site">
+          <span class="pill-dot"></span> 🛡️ PrivacyLens Active
+        </div>
+        <div class="cart-icon">🛒 <span class="cart-badge">2</span></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO BANNER -->
+  <section class="hero">
+    <div class="hero-content">
+      <span class="badge">SUMMER SALE 2026</span>
+      <h1>Upgrade Your Lifestyle with Premium Gear</h1>
+      <p>Discover handpicked electronics, designer wear, and smart home accessories with instant fast shipping.</p>
+      <div class="hero-buttons">
+        <a href="#products" class="btn btn-primary">Explore Products</a>
+        <a href="#signup-section" class="btn btn-secondary">Get 15% Off Signup</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURED PRODUCTS SECTION -->
+  <section id="products" class="products-section">
+    <div class="section-header">
+      <h2>Trending Products</h2>
+      <p>Hand-picked tech and style essentials for modern living</p>
+    </div>
+    <div class="product-grid">
+      <div class="product-card">
+        <div class="product-image tech-1">🎧</div>
+        <div class="product-info">
+          <span class="category">Audio</span>
+          <h3>Pro Wireless Headphones</h3>
+          <div class="price-row">
+            <span class="price">₹12,499</span>
+            <span class="rating">★ 4.9 (128)</span>
+          </div>
+          <button class="btn btn-outline" onclick="showToast('Added Pro Wireless Headphones to Cart')">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-image tech-2">⌚</div>
+        <div class="product-info">
+          <span class="category">Wearables</span>
+          <h3>FitPulse Smartwatch V2</h3>
+          <div class="price-row">
+            <span class="price">₹8,999</span>
+            <span class="rating">★ 4.8 (94)</span>
+          </div>
+          <button class="btn btn-outline" onclick="showToast('Added FitPulse Smartwatch V2 to Cart')">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-image tech-3">🎒</div>
+        <div class="product-info">
+          <span class="category">Travel</span>
+          <h3>Urban Leather Backpack</h3>
+          <div class="price-row">
+            <span class="price">₹4,299</span>
+            <span class="rating">★ 4.7 (62)</span>
+          </div>
+          <button class="btn btn-outline" onclick="showToast('Added Urban Leather Backpack to Cart')">Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-image tech-4">🕶️</div>
+        <div class="product-info">
+          <span class="category">Fashion</span>
+          <h3>Polarized Sunglasses</h3>
+          <div class="price-row">
+            <span class="price">₹2,999</span>
+            <span class="rating">★ 4.9 (210)</span>
+          </div>
+          <button class="btn btn-outline" onclick="showToast('Added Polarized Sunglasses to Cart')">Add to Cart</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACCOUNT REGISTRATION & PRIVACY CONSENT FORM -->
+  <section id="signup-section" class="signup-section">
+    <div class="signup-container">
+      <div class="signup-header">
+        <span class="signup-icon">👤</span>
+        <h2>Create ShopEase Account</h2>
+        <p>Sign up now to unlock exclusive member discounts, order tracking, and 1-click checkout.</p>
+      </div>
+
+      <form id="shopease-signup-form" class="signup-form">
+        <div class="form-group">
+          <label for="name">Full Name</label>
+          <input type="text" id="name" name="name" placeholder="Joshua Smith" value="Joshua Smith" required autocomplete="name">
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" name="email" placeholder="joshua@example.com" value="joshua@example.com" required autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label for="phone">Phone Number</label>
+          <input type="tel" id="phone" name="phone" placeholder="+91 98765 43210" value="+91 98765 43210" required autocomplete="tel">
+        </div>
+
+        <div class="consents-box">
+          <div class="consent-title">🔒 Privacy & Consent Permissions (DPDP Act)</div>
+          
+          <label class="checkbox-label">
+            <input type="checkbox" id="consent-terms" name="terms" checked required>
+            <span class="custom-checkbox"></span>
+            <span class="label-text">I agree to the <a href="javascript:void(0)" onclick="openPrivacyModal()">Terms of Service</a> & Privacy Policy (Account Creation)</span>
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="consent-marketing" name="marketing" checked>
+            <span class="custom-checkbox"></span>
+            <span class="label-text">I agree to receive promotional communications & marketing emails</span>
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="consent-thirdparty" name="thirdPartySharing" checked>
+            <span class="custom-checkbox"></span>
+            <span class="label-text">I agree to share my browsing data with 3rd-party advertising partners</span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-submit" id="btn-create-account">
+          <span>Create Account & Join Rewards</span>
+          <span class="btn-arrow">→</span>
+        </button>
+
+        <div class="privacy-note">
+          <span class="shield-icon">🛡️</span> Protected by PrivacyLens extension active tracking. Read our <a href="javascript:void(0)" onclick="openPrivacyModal()">Privacy Policy</a>.
+        </div>
+      </form>
+
+      <!-- SUCCESS / STATUS DISPLAY -->
+      <div id="signup-success-card" class="success-card hidden">
+        <div class="success-icon">🎉</div>
+        <h3>Welcome to ShopEase, Joshua!</h3>
+        <p>Your account has been created successfully. The PrivacyLens browser extension has recorded your consent settings.</p>
+        <div class="account-details">
+          <div class="detail-row"><span>Account Email:</span> <strong>joshua@example.com</strong></div>
+          <div class="detail-row"><span>Marketing Consent:</span> <span id="status-marketing" class="status-badge active">ACTIVE</span></div>
+          <div class="detail-row"><span>3rd-Party Sharing:</span> <span id="status-thirdparty" class="status-badge active">ACTIVE</span></div>
+          <div class="detail-row"><span>Deletion Tier:</span> <span class="tier-badge">TIER 1 (Direct API Integrated)</span></div>
+        </div>
+        <div class="partner-api-actions">
+          <h4>Partner Direct API Simulation</h4>
+          <p>You can test direct Tier 1 revocation directly from this mock partner backend:</p>
+          <button class="btn btn-revoke" onclick="testDirectRevoke()">Simulate Direct API Revocation</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- PRIVACY POLICY MODAL FOR AI SUMMARIZER -->
+  <div id="privacy-modal" class="modal-backdrop hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>ShopEase Legal Terms & Privacy Policy</h3>
+        <button class="close-modal" onclick="closePrivacyModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="policy-section">
+          <h4>1. Information We Collect</h4>
+          <p>We collect personal information that you provide when registering an account, including your full name, email address, phone number, and shipping address. Additionally, we capture device identifiers, cookie parameters, and browsing history across our store network.</p>
+        </div>
+        <div class="policy-section">
+          <h4>2. Marketing & Promotional Consent</h4>
+          <p>By checking the promotional communications box, you consent to receive weekly promotional emails, SMS notifications, and targeted marketing campaigns. We retain your marketing preferences until explicitly revoked.</p>
+        </div>
+        <div class="policy-section">
+          <h4>3. Third-Party Data Sharing</h4>
+          <p>We share non-aggregated behavioral data, device fingerprints, and email hashes with external ad networks (Google, Meta, AdRoll) to serve personalized advertisements across partner websites.</p>
+        </div>
+        <div class="policy-section">
+          <h4>4. Your Rights Under DPDP Act 2023</h4>
+          <p>Under the Digital Personal Data Protection Act 2023, you retain the right to withdraw consent (Section 6) and request complete data erasure (Section 12). You may exercise these rights via our integrated direct API or via the PrivacyLens Control Center.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closePrivacyModal()">I Understand</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p>© 2026 ShopEase Inc. All rights reserved. Mock E-Commerce Platform built for PrivacyLens Hackathon Demo.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
