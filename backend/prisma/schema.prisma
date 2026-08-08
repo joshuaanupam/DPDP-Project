@@ -13,11 +13,25 @@ model User {
   email        String           @unique
   passwordHash String
   privacyScore Int              @default(85)
+  isChild      Boolean          @default(false)
+  parentEmail  String?
   createdAt    DateTime         @default(now())
   dataItems    DataItem[]
   consents     Consent[]
   requests     PrivacyRequest[]
   auditLogs    AuditLog[]
+  nominees     Nominee[]
+}
+
+model Nominee {
+  id           String   @id @default(uuid())
+  userId       String
+  name         String
+  email        String
+  relationship String
+  confirmed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Website {
@@ -30,10 +44,23 @@ model Website {
   deletionTier Int              @default(2) // 1: Direct API, 2: Guided URL, 3: Letter
   directApiUrl String?
   guidedUrl    String?
+  isSDF        Boolean          @default(false)
   dataItems    DataItem[]
   consents     Consent[]
   requests     PrivacyRequest[]
   auditLogs    AuditLog[]
+  breaches     DataBreach[]
+}
+
+model DataBreach {
+  id              String   @id @default(uuid())
+  websiteId       String
+  description     String
+  affectedCount   Int      @default(0)
+  reportedToBoard Boolean  @default(false)
+  severity        String   @default("Medium") // Low, Medium, High
+  createdAt       DateTime @default(now())
+  website         Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 }
 
 model DataItem {
