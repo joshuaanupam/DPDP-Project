@@ -1,15 +1,28 @@
-// background.js - RECLAIM Privacy Exposure Service Worker (Stage 2)
-// Implements: Bounded Exposure Model, Explainable Risk Engine, Cleanup Registry, and Hackathon Demo Mode
+// background.js - RECLAIM Privacy Exposure Service Worker
+// Manages: Full Exposure Database, Rolling 5-Event Recent Events Queue, Risk Engine, and Demo Data
 
 const BACKEND_API = 'http://localhost:5000/api/events';
-const MAX_EXPOSURE_RECORDS = 200;
-const MAX_RECENT_EVENTS = 20;
+const MAX_EXPOSURE_RECORDS = 200; // Database limit for unique domains
+const MAX_RECENT_EVENTS = 5;      // Strict 5-event limit for popup rolling list
+
+/**
+ * Normalizes host domain for display and storage consistency (e.g. www.amazon.in -> amazon.in)
+ */
+function normalizeDomain(hostname) {
+  if (!hostname) return 'unknown';
+  let domain = hostname.toLowerCase().trim().split(':')[0];
+  if (domain.startsWith('www.')) {
+    domain = domain.substring(4);
+  }
+  return domain;
+}
 
 // Configurable Cleanup Method Registry for popular domains
 const CLEANUP_REGISTRY = {
   'google.com': { method: 'official_page', url: 'https://myaccount.google.com/privacyselect', type: 'account_deletion' },
   'facebook.com': { method: 'official_page', url: 'https://www.facebook.com/help/delete_account', type: 'account_deletion' },
   'amazon.com': { method: 'official_page', url: 'https://www.amazon.com/gp/help/customer/display.html?nodeId=G8SWB23BStandard', type: 'account_deletion' },
+  'amazon.in': { method: 'official_page', url: 'https://www.amazon.in/gp/help/customer/display.html?nodeId=G8SWB23BStandard', type: 'account_deletion' },
   'x.com': { method: 'official_page', url: 'https://x.com/settings/deactivate', type: 'account_deletion' },
   'twitter.com': { method: 'official_page', url: 'https://twitter.com/settings/deactivate', type: 'account_deletion' },
   'linkedin.com': { method: 'official_page', url: 'https://www.linkedin.com/psettings/account-management/close-account', type: 'account_deletion' },
@@ -17,12 +30,12 @@ const CLEANUP_REGISTRY = {
   'oldshopping.com': { method: 'official_page', url: 'https://example.com/delete-account', type: 'account_deletion' }
 };
 
-// Hackathon Demo Dataset (Pre-populated sample data)
+// Hackathon Demo Dataset (Pre-populated sample database)
 const DEMO_EXPOSURES = {
   'oldshopping.com': {
     id: 'exp_demo_1',
     domain: 'oldshopping.com',
-    firstSeen: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(), // 12 months ago
+    firstSeen: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
     lastSeen: new Date(Date.now() - 300 * 24 * 60 * 60 * 1000).toISOString(),
     dataTypes: ['email', 'phone', 'name'],
     consentTypes: ['marketing', 'promotional'],
@@ -110,9 +123,17 @@ const DEMO_EXPOSURES = {
   }
 };
 
+// Demo Recent Events Queue (5 initial rolling demo events: newest -> oldest)
+const DEMO_RECENT_EVENTS = [
+  { eventId: 'evt_demo_1', domain: 'myntra.com', dataTypes: ['email'], consents: ['marketing'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString() },
+  { eventId: 'evt_demo_2', domain: 'croma.com', dataTypes: ['email', 'phone'], consents: ['terms'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
+  { eventId: 'evt_demo_3', domain: 'instagram.com', dataTypes: ['email'], consents: ['terms'], riskLevel: 'medium', timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString() },
+  { eventId: 'evt_demo_4', domain: 'flipkart.com', dataTypes: ['email', 'phone'], consents: ['marketing'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString() },
+  { eventId: 'evt_demo_5', domain: 'amazon.in', dataTypes: ['email', 'phone', 'name'], consents: ['marketing'], riskLevel: 'low', timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString() }
+];
+
 /**
- * Explainable Risk Classification Engine
- * Evaluates factors and returns risk level and human-readable reasons.
+ * Deterministic Explainable Risk Classification Engine
  */
 function evaluateRisk(dataTypes = [], consentTypes = [], lastSeenDate = null) {
   let score = 0;
@@ -145,7 +166,6 @@ function evaluateRisk(dataTypes = [], consentTypes = [], lastSeenDate = null) {
     reasons.push('Promotional newsletter consent active');
   }
 
-  // Calculate inactivity
   if (lastSeenDate) {
     const daysInactive = (Date.now() - new Date(lastSeenDate).getTime()) / (1000 * 60 * 60 * 24);
     if (daysInactive > 90) {
@@ -171,7 +191,7 @@ function evaluateRisk(dataTypes = [], consentTypes = [], lastSeenDate = null) {
  * Helper to get cleanup method for a domain
  */
 function getCleanupMethod(domain) {
-  const normalized = (domain || '').toLowerCase();
+  const normalized = normalizeDomain(domain);
   if (CLEANUP_REGISTRY[normalized]) {
     return CLEANUP_REGISTRY[normalized];
   }
@@ -186,9 +206,9 @@ function getCleanupMethod(domain) {
 chrome.runtime.onInstalled.addListener(async () => {
   const data = await chrome.storage.local.get(['exposures']);
   if (!data.exposures || Object.keys(data.exposures).length === 0) {
-    // Pre-seed with Hackathon Demo data on fresh install
     await chrome.storage.local.set({
       exposures: DEMO_EXPOSURES,
+      recentEvents: DEMO_RECENT_EVENTS,
       demoMode: true,
       timeline: [
         { domain: 'oldshopping.com', action: 'Form Submission - Email, Phone, Name', timestamp: new Date(Date.now() - 300 * 24 * 3600 * 1000).toISOString() },
@@ -200,7 +220,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 /**
- * Listener for Extension Message Bus
+ * Message Bus Listener
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return;
@@ -212,6 +232,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleUpdateCleanupStatus(message.domain, message.status);
   } else if (message.type === 'TOGGLE_DEMO_MODE') {
     handleToggleDemoMode(message.enableDemo);
+  } else if (message.type === 'CLEAR_ALL_DATA') {
+    handleClearAllData();
   } else if (message.type === 'GET_CLEANUP_INFO') {
     const info = getCleanupMethod(message.domain);
     sendResponse(info);
@@ -220,22 +242,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Updates cleanup status for a specific domain record
+ * Updates cleanup status for a domain in main exposures DB
  */
 async function handleUpdateCleanupStatus(domain, status) {
   if (!domain || !status) return;
+  const normalized = normalizeDomain(domain);
 
   try {
     const data = await chrome.storage.local.get(['exposures', 'timeline']);
     const exposures = data.exposures || {};
     const timeline = data.timeline || [];
 
-    if (exposures[domain]) {
-      exposures[domain].cleanupStatus = status;
+    if (exposures[normalized]) {
+      exposures[normalized].cleanupStatus = status;
       
-      // Log timeline entry
       timeline.unshift({
-        domain: domain,
+        domain: normalized,
         action: `Cleanup status updated to ${status.replace('_', ' ')}`,
         timestamp: new Date().toISOString()
       });
@@ -249,17 +271,17 @@ async function handleUpdateCleanupStatus(domain, status) {
 }
 
 /**
- * Toggles Demo Mode data loading for hackathon presentation
+ * Toggles Demo Mode data loading
  */
 async function handleToggleDemoMode(enableDemo) {
   if (enableDemo) {
     await chrome.storage.local.set({
       exposures: DEMO_EXPOSURES,
+      recentEvents: DEMO_RECENT_EVENTS,
       demoMode: true
     });
   } else {
-    // Clear demo data, keeping only non-demo records if any
-    const data = await chrome.storage.local.get(['exposures']);
+    const data = await chrome.storage.local.get(['exposures', 'recentEvents']);
     const exposures = data.exposures || {};
     const realExposures = {};
 
@@ -269,8 +291,11 @@ async function handleToggleDemoMode(enableDemo) {
       }
     });
 
+    const realRecentEvents = (data.recentEvents || []).filter(e => e.eventId && !e.eventId.startsWith('evt_demo_'));
+
     await chrome.storage.local.set({
       exposures: realExposures,
+      recentEvents: realRecentEvents,
       demoMode: false
     });
   }
@@ -279,7 +304,24 @@ async function handleToggleDemoMode(enableDemo) {
 }
 
 /**
- * Process incoming real form submission event
+ * Clears all local exposure data
+ */
+async function handleClearAllData() {
+  await chrome.storage.local.set({
+    exposures: {},
+    recentEvents: [],
+    timeline: [],
+    demoMode: false
+  });
+  chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+}
+
+/**
+ * Process incoming real form submission event.
+ * Maintains:
+ * 1. FULL EXPOSURE DATABASE (`exposures` map) - NOT capped at 5!
+ * 2. RECENT EXPOSURE EVENTS (`recentEvents` queue) - Capped strictly at MAX_RECENT_EVENTS (5)!
+ * 3. TIMELINE (`timeline` array) - Historical audit trail.
  */
 async function processExposureEvent(event) {
   try {
@@ -288,15 +330,19 @@ async function processExposureEvent(event) {
     let recentEvents = storageData.recentEvents || [];
     let timeline = storageData.timeline || [];
 
-    const domain = event.domain;
+    const domain = normalizeDomain(event.domain);
     const now = new Date().toISOString();
     const existing = exposures[domain];
 
+    // Evaluate risk level for the new event
+    const { riskLevel, riskReasons } = evaluateRisk(event.dataTypes || [], event.consents || [], now);
+
+    // 1. UPDATE FULL EXPOSURE DATABASE (exposures) - UNLIMITED / NOT capped at 5!
     if (existing) {
       const mergedDataTypes = Array.from(new Set([...(existing.dataTypes || []), ...(event.dataTypes || [])]));
       const mergedConsentTypes = Array.from(new Set([...(existing.consentTypes || []), ...(event.consents || [])]));
       
-      const { riskLevel, riskReasons } = evaluateRisk(mergedDataTypes, mergedConsentTypes, now);
+      const updatedRisk = evaluateRisk(mergedDataTypes, mergedConsentTypes, now);
 
       exposures[domain] = {
         ...existing,
@@ -304,12 +350,10 @@ async function processExposureEvent(event) {
         dataTypes: mergedDataTypes,
         consentTypes: mergedConsentTypes,
         eventCount: (existing.eventCount || 1) + 1,
-        riskLevel: riskLevel,
-        riskReasons: riskReasons
+        riskLevel: updatedRisk.riskLevel,
+        riskReasons: updatedRisk.riskReasons
       };
     } else {
-      const { riskLevel, riskReasons } = evaluateRisk(event.dataTypes, event.consents, now);
-
       exposures[domain] = {
         id: 'exp_' + Math.random().toString(36).substring(2, 11),
         domain: domain,
@@ -325,27 +369,33 @@ async function processExposureEvent(event) {
       };
     }
 
-    // Bounded Growth (Evict oldest if over limit)
+    // Database Bounded Limit (evict oldest domain if over 200)
     const domainKeys = Object.keys(exposures);
     if (domainKeys.length > MAX_EXPOSURE_RECORDS) {
       const sortedKeys = domainKeys.sort((a, b) => new Date(exposures[a].lastSeen) - new Date(exposures[b].lastSeen));
       delete exposures[sortedKeys[0]];
     }
 
-    // Recent events log
-    recentEvents.unshift({
-      eventId: event.eventId,
-      domain: domain,
-      dataTypes: event.dataTypes,
-      consents: event.consents,
+    // 2. UPDATE ROLLING 5-EVENT RECENT EVENTS QUEUE (recentEvents) - Strictly Capped at 5!
+    const newRecentEvent = {
+      eventId: event.eventId || ('evt_' + Math.random().toString(36).substring(2, 11)),
+      domain: domain, // Normalized domain (e.g. amazon.in)
+      dataTypes: event.dataTypes || [],
+      consents: event.consents || [],
+      riskLevel: riskLevel,
       timestamp: now,
-      eventType: event.eventType
-    });
+      eventType: event.eventType || 'FORM_SUBMISSION'
+    };
+
+    // Insert at index 0 (newest at TOP)
+    recentEvents.unshift(newRecentEvent);
+
+    // If 6th event occurs, remove the oldest (last item)
     if (recentEvents.length > MAX_RECENT_EVENTS) {
-      recentEvents = recentEvents.slice(0, MAX_RECENT_EVENTS);
+      recentEvents.pop();
     }
 
-    // Add to timeline
+    // 3. UPDATE TIMELINE
     timeline.unshift({
       domain: domain,
       action: `Form Submission Detected (${(event.dataTypes || []).join(', ')})`,
@@ -353,7 +403,10 @@ async function processExposureEvent(event) {
     });
     if (timeline.length > 50) timeline = timeline.slice(0, 50);
 
+    // Save to chrome.storage.local
     await chrome.storage.local.set({ exposures, recentEvents, timeline });
+
+    // Broadcast real-time update to popup and open tabs
     chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
 
   } catch (err) {
@@ -366,7 +419,7 @@ async function processExposureEvent(event) {
  */
 async function sendToBackend(event) {
   const backendPayload = {
-    domain: event.domain,
+    domain: normalizeDomain(event.domain),
     dataTypes: event.dataTypes || [],
     consents: event.consents || [],
     eventType: event.eventType || 'FORM_SUBMISSION',

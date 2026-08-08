@@ -1,10 +1,19 @@
-// popup.js - RECLAIM UI Controller
+// popup.js - RECLAIM Extension Popup UI Controller
+
+const MAX_RECENT_EVENTS_DISPLAY = 5;
 
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await refreshUI();
 
-  // Listen for real-time storage updates from background script
+  // Listen for real-time storage updates (instantly updates open popup when 6th/7th event occurs)
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && (changes.recentEvents || changes.exposures)) {
+      refreshUI();
+    }
+  });
+
+  // Also listen for runtime message updates
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'DATA_UPDATED' || message.type === 'EVENTS_UPDATED') {
       refreshUI();
@@ -22,7 +31,7 @@ function setupEventListeners() {
 }
 
 /**
- * Normalizes host domain for display consistency
+ * Reusable domain normalizer (e.g. www.amazon.in -> amazon.in)
  */
 function normalizeDomain(hostname) {
   if (!hostname) return '';
@@ -34,7 +43,7 @@ function normalizeDomain(hostname) {
 }
 
 /**
- * Calculates overall privacy health score (0-100) based on digital exposure footprint.
+ * Calculates overall privacy health score (0-100) based on full exposure database
  */
 function calculatePrivacyScore(exposuresObj) {
   const records = Object.values(exposuresObj || {});
@@ -80,10 +89,10 @@ async function refreshUI() {
   // Render Current Site Section
   renderCurrentSite(currentDomain, exposures[currentDomain]);
 
-  // Render Overall Overview Metrics & Privacy Score
+  // Render Overall Overview Metrics & Privacy Score (from Full Exposure Database)
   renderExposureOverview(exposures);
 
-  // Render Recent Exposure Activity
+  // Render Recent Exposure Activity (Rolling 5-Event List)
   renderRecentEvents(recentEvents, exposures);
 }
 
@@ -157,33 +166,48 @@ function renderExposureOverview(exposures) {
 }
 
 /**
- * Renders recent exposure history
+ * Renders recent exposure history (Strictly 5 Most Recent Events in Chronological Recency Order)
  */
 function renderRecentEvents(recentEvents, exposures) {
   const listEl = document.getElementById('recent-exposure-list');
   
   if (!recentEvents || recentEvents.length === 0) {
-    listEl.innerHTML = '<div style="font-size: 12px; color: #94a3b8; text-align: center; padding: 6px 0;">No exposure events recorded yet.</div>';
+    listEl.innerHTML = '<div class="no-events" style="font-size: 12px; color: #94a3b8; text-align: center; padding: 12px 0;">No recent exposure events.</div>';
     return;
   }
 
   listEl.innerHTML = '';
 
-  recentEvents.slice(0, 5).forEach(evt => {
+  // Take maximum 5 events (index 0 is newest)
+  const displayEvents = recentEvents.slice(0, MAX_RECENT_EVENTS_DISPLAY);
+
+  displayEvents.forEach(evt => {
     const item = document.createElement('div');
     item.className = 'recent-item';
 
-    const domain = evt.domain || 'unknown';
-    const siteExp = exposures[domain];
-    const risk = siteExp ? siteExp.riskLevel : 'low';
-    const time = evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const normalizedDom = normalizeDomain(evt.domain);
+    const siteExp = exposures[normalizedDom];
+    const risk = evt.riskLevel || (siteExp ? siteExp.riskLevel : 'low');
+    
+    // User-friendly time format (e.g. 2:15 PM)
+    let formattedTime = '';
+    if (evt.timestamp) {
+      try {
+        formattedTime = new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        formattedTime = '';
+      }
+    }
+
+    // Short risk label (LOW, MED, HIGH)
+    const riskLabel = risk === 'medium' ? 'MED' : risk.toUpperCase();
 
     item.innerHTML = `
       <div>
-        <strong style="color: #1e293b;">${domain}</strong>
-        <span style="font-size: 10px; color: #94a3b8; margin-left: 4px;">${time}</span>
+        <strong style="color: #1e293b;">${normalizedDom}</strong>
+        <span style="font-size: 10px; color: #94a3b8; margin-left: 6px;">${formattedTime}</span>
       </div>
-      <span class="risk-pill risk-${risk}" style="font-size: 9px; padding: 1px 6px;">${risk.toUpperCase()}</span>
+      <span class="risk-pill risk-${risk}" style="font-size: 9px; padding: 1px 6px;">${riskLabel}</span>
     `;
 
     listEl.appendChild(item);
