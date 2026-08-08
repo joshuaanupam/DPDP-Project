@@ -173,6 +173,14 @@ export const PrivacyProvider = ({ children }) => {
       const message = e.data;
       if (message && message.direction === 'from-content-script') {
         if (message.type === 'ExtensionSessionResponse') {
+          // If we received any response from the extension, it is active!
+          setExtensionStatus('Active');
+          hasDetectedExtension.current = true;
+          if (pingTimeoutRef.current) {
+            clearTimeout(pingTimeoutRef.current);
+            pingTimeoutRef.current = null;
+          }
+
           const extensionSession = message.detail;
           if (extensionSession && extensionSession.token) {
             localStorage.setItem('privacylens_token', extensionSession.token);
@@ -224,6 +232,11 @@ export const PrivacyProvider = ({ children }) => {
     window.addEventListener('message', handlePingPong);
 
     const checkStatus = () => {
+      // Clear any existing active timeout first
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+
       // Set timeout to wait for pong response
       pingTimeoutRef.current = setTimeout(() => {
         if (hasDetectedExtension.current) {
