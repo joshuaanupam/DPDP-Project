@@ -3,7 +3,7 @@ import { Shield, Sparkles, User, Activity, RefreshCw, CheckCircle2, Lock, Sun, M
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const Navbar = () => {
-  const { userData, stats, logout } = usePrivacy();
+  const { userData, stats, logout, extensionStatus } = usePrivacy();
   const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
 
   const toggleDark = () => {
@@ -88,14 +88,32 @@ export const Navbar = () => {
           {/* Right: Extension Status & User Profile */}
           <div className="flex items-center space-x-4">
             
-            {/* MV3 Extension Active Badge */}
-            <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="font-semibold">MV3 Extension Sync Active</span>
-            </div>
+            {/* MV3 Extension Sync Badge */}
+            {extensionStatus === 'Active' && (
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="font-semibold">MV3 Extension Sync Active</span>
+              </div>
+            )}
+            {extensionStatus === 'Off' && (
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                <span className="font-semibold">MV3 Extension Sync Off</span>
+              </div>
+            )}
+            {extensionStatus === 'Not Installed' && (
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-400 text-xs font-medium">
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400"></span>
+                </span>
+                <span className="font-semibold">MV3 Extension Not Installed</span>
+              </div>
+            )}
 
             {/* Theme Toggle Button */}
             <button

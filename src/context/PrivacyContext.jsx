@@ -7,6 +7,9 @@ export const PrivacyProvider = ({ children }) => {
   const [userData, setUserData] = useState(initialData.user);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [extensionStatus, setExtensionStatus] = useState('Not Installed');
+  const hasDetectedExtension = React.useRef(false);
+  const pingTimeoutRef = React.useRef(null);
   const [websites, setWebsites] = useState([]);
   const [requests, setRequests] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -201,6 +204,48 @@ export const PrivacyProvider = ({ children }) => {
 
     return () => {
       window.removeEventListener('message', handleMessage);
+    };
+  }, []);
+
+  // Heartbeat query for MV3 extension status (Installed/Enabled -> Active, Disabled -> Off, Not Installed -> Not Installed)
+  React.useEffect(() => {
+    const handlePingPong = (e) => {
+      const message = e.data;
+      if (message && message.direction === 'from-content-script' && message.type === 'PongExtension') {
+        setExtensionStatus('Active');
+        hasDetectedExtension.current = true;
+        if (pingTimeoutRef.current) {
+          clearTimeout(pingTimeoutRef.current);
+          pingTimeoutRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener('message', handlePingPong);
+
+    const checkStatus = () => {
+      // Set timeout to wait for pong response
+      pingTimeoutRef.current = setTimeout(() => {
+        if (hasDetectedExtension.current) {
+          setExtensionStatus('Off');
+        } else {
+          setExtensionStatus('Not Installed');
+        }
+      }, 1500);
+
+      window.postMessage({ direction: 'from-page', type: 'PingExtension' }, '*');
+    };
+
+    const interval = setInterval(checkStatus, 5000);
+    // Initial immediate ping
+    checkStatus();
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('message', handlePingPong);
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -523,6 +568,7 @@ export const PrivacyProvider = ({ children }) => {
         userData,
         isAuthenticated,
         authLoading,
+        extensionStatus,
         login,
         logout,
         websites,

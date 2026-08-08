@@ -1018,6 +1018,11 @@ if (isDashboardPage) {
         } catch (err) {
           console.error('Failed to clear session in extension:', err);
         }
+      } else if (message.type === 'PingExtension') {
+        window.postMessage({
+          direction: 'from-content-script',
+          type: 'PongExtension'
+        }, '*');
       }
     }
   });
