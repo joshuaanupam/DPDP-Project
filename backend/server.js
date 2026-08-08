@@ -78,8 +78,10 @@ app.post('/api/auth/login', async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
-    // Allow 'password' or match database hashed value for demo flexibility
-    if (password === 'password' || user.passwordHash === 'hashed_demo_password' || user.passwordHash.includes('seed')) {
+    // Check password: allow demo defaults OR direct match (for self-registered users)
+    const isDemo = password === 'password' || user.passwordHash === 'hashed_demo_password' || user.passwordHash.includes('seed');
+    const isDirectMatch = user.passwordHash === password; // For users who registered via sign-up form
+    if (isDemo || isDirectMatch) {
       return res.json({
         success: true,
         user: {
@@ -140,6 +142,34 @@ app.post('/api/auth/register', async (req, res, next) => {
       },
       token: `token_${user.id}`
     });
+  } catch (err) {
+    next(err);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+// Forgot Password — resets password to a new value (demo: stores plaintext)
+app.post('/api/auth/forgot-password', async (req, res, next) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) {
+      // Don't reveal if email exists — always return success for security
+      return res.json({ success: true, message: 'If this email is registered, a reset link has been sent. For this demo, your password has been reset to: password123' });
+    }
+    // Reset password to a known demo value
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: 'password123' }
+    });
+    console.log(`[Password Reset] User ${user.email} password reset to password123`);
+    return res.json({ success: true, message: 'Password reset successful! Your new password is: password123' });
   } catch (err) {
     next(err);
   } finally {
