@@ -227,7 +227,6 @@ if (window.location.protocol.startsWith('http')) {
     });
   }
 }
-
 // Message bus listener for DOM tracking queries
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === 'CHECK_BEHAVIORAL_TRACKING') {
@@ -982,3 +981,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
 })();
+
+// --- SHARED AUTHENTICATION SYNC WITH WEB DASHBOARD ---
+const isDashboardPage = window.location.port === '5173' || 
+                        window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1' ||
+                        (document.title && document.title.includes('PrivacyLens'));
+
+if (isDashboardPage) {
+  // Listen for active queries from page
+  window.addEventListener('message', async (event) => {
+    const message = event.data;
+    if (message && message.direction === 'from-page') {
+      if (message.type === 'GetExtensionSession') {
+        try {
+          const data = await chrome.storage.local.get(['session']);
+          window.postMessage({
+            direction: 'from-content-script',
+            type: 'ExtensionSessionResponse',
+            detail: data.session || null
+          }, '*');
+        } catch (err) {
+          console.error('Failed to get session from extension:', err);
+        }
+      } else if (message.type === 'SetExtensionSession') {
+        try {
+          if (message.detail) {
+            await chrome.storage.local.set({ session: message.detail });
+          }
+        } catch (err) {
+          console.error('Failed to save session in extension:', err);
+        }
+      } else if (message.type === 'ClearExtensionSession') {
+        try {
+          await chrome.storage.local.remove(['session']);
+        } catch (err) {
+          console.error('Failed to clear session in extension:', err);
+        }
+      }
+    }
+  });
+
+  // Startup Broadcast: Immediately push current session state to avoid race conditions
+  (async () => {
+    try {
+      const data = await chrome.storage.local.get(['session']);
+      window.postMessage({
+        direction: 'from-content-script',
+        type: 'ExtensionSessionResponse',
+        detail: data.session || null
+      }, '*');
+    } catch (err) {
+      console.error('Failed to broadcast initial session on load:', err);
+    }
+  })();
+}
+

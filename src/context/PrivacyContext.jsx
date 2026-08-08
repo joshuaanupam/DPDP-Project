@@ -5,6 +5,8 @@ const PrivacyContext = createContext();
 
 export const PrivacyProvider = ({ children }) => {
   const [userData, setUserData] = useState(initialData.user);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [websites, setWebsites] = useState([]);
   const [requests, setRequests] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -69,11 +71,137 @@ export const PrivacyProvider = ({ children }) => {
     }
   };
 
-  // Load live data from backend on mount
+  // Execute User Login
+  const login = async (email, password) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem('privacylens_token', data.token);
+        setUserData(data.user);
+        setIsAuthenticated(true);
+        setBackendActive(true);
+
+        // Sync to extension via postMessage
+        window.postMessage({
+          direction: 'from-page',
+          type: 'SetExtensionSession',
+          detail: { token: data.token, user: data.user }
+        }, '*');
+
+        // Load data for the user
+        await fetchDashboardData(data.user.id);
+        await fetchRequests(data.user.id);
+        await fetchAuditLogs(data.user.id);
+        return { success: true };
+      }
+      return { success: false, message: data.message || 'Login failed.' };
+    } catch (err) {
+      return { success: false, message: 'Could not connect to backend authentication server.' };
+    }
+  };
+
+  // Execute User Logout
+  const logout = () => {
+    localStorage.removeItem('privacylens_token');
+    setIsAuthenticated(false);
+    setUserData(initialData.user);
+
+    // Clear extension via postMessage
+    window.postMessage({
+      direction: 'from-page',
+      type: 'ClearExtensionSession'
+    }, '*');
+  };
+
+  // Validate session token
+  const validateSession = async (token) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/auth/session/${token}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUserData(data.user);
+        setIsAuthenticated(true);
+        setBackendActive(true);
+
+        // Sync to extension on successful validation to keep in sync
+        window.postMessage({
+          direction: 'from-page',
+          type: 'SetExtensionSession',
+          detail: { token, user: data.user }
+        }, '*');
+
+        await fetchDashboardData(data.user.id);
+        await fetchRequests(data.user.id);
+        await fetchAuditLogs(data.user.id);
+      } else {
+        logout();
+      }
+    } catch (err) {
+      console.warn("Auth server offline. Simulating local session validation.");
+      // Fallback: trust token locally if offline
+      setIsAuthenticated(true);
+
+      // Sync offline simulated session to extension
+      window.postMessage({
+        direction: 'from-page',
+        type: 'SetExtensionSession',
+        detail: { token, user: userData }
+      }, '*');
+
+      await fetchDashboardData();
+      await fetchRequests();
+      await fetchAuditLogs();
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Load live data and check auth status on mount
   React.useEffect(() => {
-    fetchDashboardData();
-    fetchRequests();
-    fetchAuditLogs();
+    const token = localStorage.getItem('privacylens_token');
+
+    // Listener for response from extension via postMessage
+    const handleMessage = (e) => {
+      const message = e.data;
+      if (message && message.direction === 'from-content-script') {
+        if (message.type === 'ExtensionSessionResponse') {
+          const extensionSession = message.detail;
+          if (extensionSession && extensionSession.token) {
+            localStorage.setItem('privacylens_token', extensionSession.token);
+            validateSession(extensionSession.token);
+          } else {
+            setAuthLoading(false);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    if (token) {
+      validateSession(token);
+    } else {
+      // Query extension to see if it has a session via postMessage
+      window.postMessage({ direction: 'from-page', type: 'GetExtensionSession' }, '*');
+
+      // Fallback timeout to ensure dashboard shows login if extension is offline or no session
+      const timer = setTimeout(() => {
+        setAuthLoading(false);
+      }, 1000);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('message', handleMessage);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   // Recalculate dynamic privacy score (local state calculation or fallback)
@@ -393,6 +521,10 @@ export const PrivacyProvider = ({ children }) => {
     <PrivacyContext.Provider
       value={{
         userData,
+        isAuthenticated,
+        authLoading,
+        login,
+        logout,
         websites,
         filteredWebsites,
         requests,

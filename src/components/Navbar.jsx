@@ -1,9 +1,21 @@
-import React from 'react';
-import { Shield, Sparkles, User, Activity, RefreshCw, CheckCircle2, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Sparkles, User, Activity, RefreshCw, CheckCircle2, Lock, Sun, Moon, LogOut } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const Navbar = () => {
-  const { userData, stats } = usePrivacy();
+  const { userData, stats, logout } = usePrivacy();
+  const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
+
+  const toggleDark = () => {
+    const nextDark = !isDark;
+    setIsDark(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
   const score = stats.privacyScore;
 
   // Determine score color theme
@@ -85,15 +97,31 @@ export const Navbar = () => {
               <span className="font-semibold">MV3 Extension Sync Active</span>
             </div>
 
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleDark}
+              className="p-2 rounded-xl glass-card text-indigo-400 hover:text-indigo-300 transition-colors"
+              title="Toggle Theme"
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
             {/* User Profile Pill */}
             <div className="flex items-center space-x-3 pl-3 border-l border-slate-200/50">
               <div className="flex items-center justify-center w-9 h-9 rounded-full glass-panel border border-slate-200/50 text-indigo-400 font-semibold shadow-inner">
-                {userData.name.charAt(0)}
+                {userData.name ? userData.name.charAt(0) : 'U'}
               </div>
               <div className="hidden lg:block text-left">
-                <p className="text-sm font-semibold text-slate-900 leading-tight">{userData.name}</p>
-                <p className="text-xs text-slate-600 truncate max-w-[120px]">{userData.email}</p>
+                <p className="text-sm font-semibold text-slate-900 leading-tight">{userData.name || 'User'}</p>
+                <p className="text-xs text-slate-600 truncate max-w-[120px]">{userData.email || ''}</p>
               </div>
+              <button
+                onClick={logout}
+                className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 transition-colors"
+                title="Log Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
 
           </div>

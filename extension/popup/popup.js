@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for real-time storage updates
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode)) {
+    if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode || changes.session)) {
       refreshUI();
     }
   });
@@ -53,6 +53,13 @@ function setupEventListeners() {
       await chrome.storage.local.set({ childSafeMode: enabled });
       chrome.runtime.sendMessage({ type: 'TOGGLE_CHILD_SAFE_MODE', enableChildSafeMode: enabled }).catch(() => {});
       refreshUI();
+    });
+  }
+
+  const btnLoginRedirect = document.getElementById('btn-login-redirect');
+  if (btnLoginRedirect) {
+    btnLoginRedirect.addEventListener('click', () => {
+      chrome.tabs.create({ url: 'http://localhost:5173' });
     });
   }
 }
@@ -108,7 +115,17 @@ function calculatePrivacyScore(exposuresObj) {
  * Main UI refresh loop - Single Source of Truth from active browser tab
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode']);
+  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'session']);
+  
+  // Verify user is authenticated before showing metrics
+  const lockOverlay = document.getElementById('lock-overlay');
+  if (!storage.session) {
+    if (lockOverlay) lockOverlay.style.display = 'flex';
+    document.getElementById('privacy-score-badge').textContent = 'Locked';
+    document.getElementById('privacy-score-badge').style.borderColor = '#64748b';
+    return;
+  }
+  if (lockOverlay) lockOverlay.style.display = 'none';
   const allExposures = storage.exposures || {};
   let visits = storage.recentWebsiteVisits || [];
   const isDemo = storage.demoMode || false;

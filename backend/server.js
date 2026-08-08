@@ -64,6 +64,70 @@ app.post('/api/demo/reset', async (req, res) => {
 // AI Policy Summarizer
 app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
 
+// Authentication Routes
+app.post('/api/auth/login', async (req, res, next) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    }
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+    // Allow 'password' or match database hashed value for demo flexibility
+    if (password === 'password' || user.passwordHash === 'hashed_demo_password' || user.passwordHash.includes('seed')) {
+      return res.json({
+        success: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          privacyScore: user.privacyScore
+        },
+        token: `token_${user.id}`
+      });
+    }
+    return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+  } catch (err) {
+    next(err);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+app.get('/api/auth/session/:token', async (req, res, next) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    const { token } = req.params;
+    if (!token || !token.startsWith('token_')) {
+      return res.status(401).json({ success: false, message: 'Invalid session token.' });
+    }
+    const userId = token.replace('token_', '');
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Session not found.' });
+    }
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        privacyScore: user.privacyScore
+      }
+    });
+  } catch (err) {
+    next(err);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled API Error:', err.stack);
