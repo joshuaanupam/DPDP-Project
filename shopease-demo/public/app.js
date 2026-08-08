@@ -1,7 +1,18 @@
 // ShopEase E-Commerce Demo Site Logic for PrivacyLens Live Testing
 
+let pollingInterval = null;
+
 document.addEventListener('DOMContentLoaded', () => {
   const signupForm = document.getElementById('shopease-signup-form');
+  const successCard = document.getElementById('signup-success-card');
+
+  // Check if user is already signed up in local session
+  const persistedEmail = localStorage.getItem('shopease_email');
+  if (persistedEmail) {
+    if (signupForm) signupForm.classList.add('hidden');
+    if (successCard) successCard.classList.remove('hidden');
+    startStatusPolling(persistedEmail);
+  }
 
   if (signupForm) {
     signupForm.addEventListener('submit', async (e) => {
@@ -15,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const thirdPartyGranted = document.getElementById('consent-thirdparty').checked;
 
       showToast('🎉 Account creation submitted to ShopEase!');
+
+      // Save email to localStorage for session persistence
+      localStorage.setItem('shopease_email', email);
 
       // Send event to PrivacyLens Backend API (http://localhost:5000/api/events)
       try {
@@ -47,13 +61,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Hide form and display success card
       signupForm.classList.add('hidden');
-      const successCard = document.getElementById('signup-success-card');
       if (successCard) {
         successCard.classList.remove('hidden');
       }
+
+      startStatusPolling(email);
     });
   }
 });
+
+// Real-time polling to check if consent has been revoked on the backend
+function startStatusPolling(email) {
+  if (pollingInterval) clearInterval(pollingInterval);
+
+  // Poll every 1.5 seconds
+  pollingInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/partner/status/${encodeURIComponent(email)}`);
+      
+      if (res.status === 404) {
+        // Account was deleted via Tier 1 Deletion API!
+        clearInterval(pollingInterval);
+        localStorage.removeItem('shopease_email');
+        showToast('🗑️ Your account was deleted from ShopEase databases.');
+        setTimeout(() => location.reload(), 2000);
+        return;
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        const consents = data.account.consents;
+
+        // Update marketing consent badge
+        const marketingBadge = document.getElementById('status-marketing');
+        if (marketingBadge) {
+          if (consents.marketingEmails) {
+            marketingBadge.textContent = 'ACTIVE';
+            marketingBadge.className = 'status-badge active';
+          } else {
+            marketingBadge.textContent = 'REVOKED (Tier 1 Direct API)';
+            marketingBadge.className = 'status-badge revoked';
+          }
+        }
+
+        // Update 3rd party sharing badge
+        const thirdPartyBadge = document.getElementById('status-thirdparty');
+        if (thirdPartyBadge) {
+          if (consents.thirdPartySharing) {
+            thirdPartyBadge.textContent = 'ACTIVE';
+            thirdPartyBadge.className = 'status-badge active';
+          } else {
+            thirdPartyBadge.textContent = 'REVOKED (Tier 1 Direct API)';
+            thirdPartyBadge.className = 'status-badge revoked';
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Polling error:', err.message);
+    }
+  }, 1500);
+}
+
+// Reset the demo manually
+function resetDemo() {
+  clearInterval(pollingInterval);
+  localStorage.removeItem('shopease_email');
+  showToast('🔄 Demo state reset successfully.');
+  setTimeout(() => location.reload(), 1000);
+}
 
 // Privacy Modal Controls
 function openPrivacyModal() {
@@ -85,8 +160,9 @@ function showToast(message) {
   }, 4000);
 }
 
-// Direct API Revocation Simulation on ShopEase Partner Server
+// Direct API Revocation Simulation from ShopEase page directly
 async function testDirectRevoke() {
+  const email = localStorage.getItem('shopease_email') || 'joshua@example.com';
   showToast('⚡ Executing Tier 1 Partner Direct Revocation...');
   try {
     const response = await fetch('/api/partner/revoke', {
@@ -94,7 +170,7 @@ async function testDirectRevoke() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId: 'usr_12345',
-        userEmail: 'joshua@example.com',
+        userEmail: email,
         targetConsent: 'Marketing Emails'
       })
     });
@@ -102,11 +178,6 @@ async function testDirectRevoke() {
     const result = await response.json();
 
     if (result.success) {
-      const marketingBadge = document.getElementById('status-marketing');
-      if (marketingBadge) {
-        marketingBadge.textContent = 'REVOKED (Tier 1 Direct API)';
-        marketingBadge.className = 'status-badge revoked';
-      }
       showToast(`✅ ${result.message}`);
     } else {
       showToast('❌ Revocation failed: ' + result.message);

@@ -42,7 +42,7 @@ function setupEventListeners() {
   const btnDashboard = document.getElementById('btn-open-dashboard');
   if (btnDashboard) {
     btnDashboard.addEventListener('click', () => {
-      alert('Privacy Dashboard is currently under development by team member and will be integrated soon!');
+      chrome.tabs.create({ url: 'http://localhost:5173' });
     });
   }
 }

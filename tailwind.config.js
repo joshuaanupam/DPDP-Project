@@ -8,9 +8,9 @@ export default {
     extend: {
       colors: {
         privacy: {
-          dark: '#0B0F19',
-          card: '#131B2E',
-          border: '#1E293B',
+          dark: '#F8FAFC',
+          card: '#FFFFFF',
+          border: '#E2E8F0',
           accent: '#6366F1',
           emerald: '#10B981',
           amber: '#F59E0B',
