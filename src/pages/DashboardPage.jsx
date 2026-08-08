@@ -27,6 +27,14 @@ export const DashboardPage = () => {
     if (activeTab === 'PENALTY' && !featureToggles.penaltyShield) setActiveTab('FOOTPRINT');
   }, [featureToggles, activeTab]);
 
+  // Reset UI state on every fresh login so the grid is always collapsed
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      setFootprintExpanded(false);
+      setActiveTab('FOOTPRINT');
+    }
+  }, [isAuthenticated]);
+
   if (authLoading || !isAuthenticated) {
     return <LoginPage />;
   }
