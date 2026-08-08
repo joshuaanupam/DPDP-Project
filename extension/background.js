@@ -1,5 +1,5 @@
 // background.js - RECLAIM Privacy Exposure Service Worker
-// Manages: Full Exposure Database, Real Website Visit Activity (Rolling 5 Unique Domains Queue), Risk Engine, and Demo Isolation
+// Manages: Full Exposure Database, Real Website Visit Activity (Rolling 5 Unique Domains Queue), Risk Engine, Tab Listeners, and Demo Isolation
 
 const BACKEND_API = 'http://localhost:5000/api/events';
 const MAX_EXPOSURE_RECORDS = 200; // Database limit for unique domain exposure records
@@ -226,6 +226,39 @@ chrome.runtime.onInstalled.addListener(async () => {
       recentWebsiteVisits: [],  // Clean recent visits queue for real user
       timeline: []
     });
+  }
+});
+
+/**
+ * Active tab listener for tab switching
+ */
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab && tab.url && !isInternalUrl(tab.url)) {
+      const domain = normalizeDomain(new URL(tab.url).hostname);
+      if (domain) {
+        await processWebsiteVisit({ domain, url: tab.url, title: tab.title, timestamp: new Date().toISOString() });
+      }
+    }
+  } catch (err) {
+    // Ignore restricted tab access
+  }
+});
+
+/**
+ * Navigation / page refresh listener for active tab updates
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab && tab.active && tab.url && !isInternalUrl(tab.url)) {
+    try {
+      const domain = normalizeDomain(new URL(tab.url).hostname);
+      if (domain) {
+        await processWebsiteVisit({ domain, url: tab.url, title: tab.title, timestamp: new Date().toISOString() });
+      }
+    } catch (err) {
+      // Ignore invalid URLs
+    }
   }
 });
 

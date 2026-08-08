@@ -1,4 +1,5 @@
 // popup.js - RECLAIM Extension Popup UI Controller
+// Manages: Active Tab Synchronization, State Machine (loading, detected, analyzing, success, unsupported-page, error), Exposure Overview, and Recent Activity Queue
 
 const MAX_RECENT_VISITS_DISPLAY = 5;
 
@@ -6,19 +7,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await refreshUI();
 
-  // Listen for real-time storage updates (instantly updates open popup when user navigates or submits)
+  // Listen for real-time storage updates
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode)) {
       refreshUI();
     }
   });
 
-  // Also listen for runtime message updates
+  // Listen for runtime message updates
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'DATA_UPDATED' || message.type === 'EVENTS_UPDATED') {
       refreshUI();
     }
   });
+
+  // Listen for active tab switching while popup is open
+  if (chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(() => {
+      refreshUI();
+    });
+  }
+
+  // Listen for tab navigation/refresh while popup is open
+  if (chrome.tabs && chrome.tabs.onUpdated) {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' && tab.active) {
+        refreshUI();
+      }
+    });
+  }
 });
 
 function setupEventListeners() {
@@ -40,6 +57,19 @@ function normalizeDomain(hostname) {
     domain = domain.substring(4);
   }
   return domain;
+}
+
+/**
+ * Checks if a URL is an internal browser/extension page
+ */
+function isInternalUrl(urlOrDomain) {
+  if (!urlOrDomain) return true;
+  const lower = urlOrDomain.toLowerCase().trim();
+  const internalPrefixes = [
+    'chrome://', 'chrome-extension://', 'edge://', 'about:',
+    'devtools://', 'file://', 'blob:', 'data:', 'view-source:'
+  ];
+  return internalPrefixes.some(prefix => lower.startsWith(prefix)) || lower === 'unknown' || lower === 'newtab';
 }
 
 /**
@@ -65,7 +95,7 @@ function calculatePrivacyScore(exposuresObj) {
 }
 
 /**
- * Main UI refresh loop
+ * Main UI refresh loop - Single Source of Truth from active browser tab
  */
 async function refreshUI() {
   const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode']);
@@ -86,22 +116,38 @@ async function refreshUI() {
     visits = visits.filter(v => !v.isDemo);
   }
 
-  // 1. Fetch current active tab domain
-  let currentDomain = '';
+  // Active Tab State Machine
+  let activeTabState = {
+    status: 'loading', // loading | detected | analyzing | success | unsupported-page | error
+    domain: '',
+    title: '',
+    url: '',
+    protocol: ''
+  };
+
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab && activeTab.url) {
+    
+    if (!activeTab || !activeTab.url) {
+      activeTabState.status = 'error';
+    } else if (isInternalUrl(activeTab.url)) {
+      activeTabState.status = 'unsupported-page';
+      activeTabState.url = activeTab.url;
+      activeTabState.title = activeTab.title || 'Browser Internal Page';
+    } else {
       const urlObj = new URL(activeTab.url);
-      if (urlObj.protocol.startsWith('http')) {
-        currentDomain = normalizeDomain(urlObj.hostname);
-      }
+      activeTabState.status = 'success';
+      activeTabState.domain = normalizeDomain(urlObj.hostname);
+      activeTabState.url = activeTab.url;
+      activeTabState.title = activeTab.title || urlObj.hostname;
+      activeTabState.protocol = urlObj.protocol.replace(':', '').toUpperCase();
     }
   } catch (e) {
-    console.error('Failed to parse current tab URL:', e);
+    activeTabState.status = 'error';
   }
 
-  // Render Current Site Section (uses activeExposures)
-  renderCurrentSite(currentDomain, activeExposures[currentDomain]);
+  // Render Current Active Site Card
+  renderCurrentSite(activeTabState, activeExposures[activeTabState.domain]);
 
   // Render Overall Overview Metrics & Privacy Score
   renderExposureOverview(activeExposures);
@@ -111,17 +157,47 @@ async function refreshUI() {
 }
 
 /**
- * Renders the active site card
+ * Renders the active site card with full state management
  */
-function renderCurrentSite(domain, siteExposure) {
+function renderCurrentSite(activeTabState, siteExposure) {
   const domainEl = document.getElementById('current-domain');
   const statusEl = document.getElementById('exposure-status');
   const riskPill = document.getElementById('site-risk-pill');
   const badgesContainer = document.getElementById('detected-badges');
 
-  domainEl.textContent = domain || 'Internal / Special Page';
+  if (activeTabState.status === 'loading') {
+    domainEl.textContent = 'Detecting website...';
+    statusEl.innerHTML = '🔄 <span style="color: #64748b;">Analyzing active browser tab...</span>';
+    riskPill.className = 'risk-pill risk-low';
+    riskPill.textContent = 'LOADING';
+    badgesContainer.innerHTML = '<span class="chip">Checking...</span>';
+    return;
+  }
 
-  if (!domain || !siteExposure) {
+  if (activeTabState.status === 'unsupported-page') {
+    domainEl.textContent = 'Internal / Special Page';
+    statusEl.innerHTML = 'ℹ️ <span style="color: #64748b;">This page cannot be analyzed by the extension.</span>';
+    riskPill.className = 'risk-pill risk-low';
+    riskPill.textContent = 'UNSUPPORTED';
+    badgesContainer.innerHTML = '<span class="chip">Internal Page</span>';
+    return;
+  }
+
+  if (activeTabState.status === 'error') {
+    domainEl.textContent = 'Unknown Page';
+    statusEl.innerHTML = '⚠️ <span style="color: #ef4444;">Unable to retrieve website information. Try again.</span>';
+    riskPill.className = 'risk-pill risk-high';
+    riskPill.textContent = 'ERROR';
+    badgesContainer.innerHTML = '<span class="chip">Error</span>';
+    return;
+  }
+
+  // Active website detected successfully
+  const domain = activeTabState.domain;
+  const protocolBadge = activeTabState.protocol === 'HTTPS' ? '🔒 HTTPS' : '⚠️ HTTP';
+  domainEl.innerHTML = `${domain} <span style="font-size: 11px; font-weight: normal; color: #64748b; margin-left: 6px;">(${protocolBadge})</span>`;
+
+  if (!siteExposure) {
     statusEl.innerHTML = '⚡ <span style="color: #64748b;">No exposure recorded on this domain yet.</span>';
     riskPill.className = 'risk-pill risk-low';
     riskPill.textContent = 'CLEAN';

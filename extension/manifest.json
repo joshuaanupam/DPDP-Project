@@ -5,7 +5,8 @@
   "description": "Privacy-focused digital exposure monitor and personal data footprint manager.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
