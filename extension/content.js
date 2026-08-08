@@ -267,6 +267,103 @@ function checkForRegistrationConfirmation() {
 }
 
 /**
+ * Detects if a form is a login / sign-in form (as opposed to a registration form).
+ * Uses ONLY safe DOM metadata (button labels, headings, form attributes).
+ * NEVER reads input values, passwords, or PII.
+ */
+function isLoginForm(form) {
+  if (!form) return false;
+
+  const action = (form.action || '').toLowerCase();
+  const id = (form.id || '').toLowerCase();
+  const className = (form.className || '').toLowerCase();
+
+  const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]'));
+  const buttonText = buttons.map(b => (b.innerText || b.value || '').toLowerCase()).join(' ');
+  const formSummary = (form.innerText || '').substring(0, 300).toLowerCase();
+
+  const fullStr = `${action} ${id} ${className} ${buttonText} ${formSummary}`;
+
+  // If registration keywords exist, it's a registration form, not a login form
+  if (fullStr.includes('signup') || fullStr.includes('sign up') || fullStr.includes('register') || fullStr.includes('create account') || fullStr.includes('join')) {
+    return false;
+  }
+
+  const loginKeywords = [
+    'login', 'log in', 'log-in', 'signin', 'sign in', 'sign-in',
+    'auth', 'authenticate', 'login.php', 'signin.html', 'user_login'
+  ];
+
+  return loginKeywords.some(kw => fullStr.includes(kw));
+}
+
+/**
+ * Checks for successful login confirmation signals.
+ * Uses ONLY safe metadata and navigation signals.
+ * NEVER reads or inspects credential values.
+ */
+function checkForLoginConfirmation() {
+  try {
+    const rawPending = sessionStorage.getItem('reclaim_pending_login');
+    if (!rawPending) return;
+
+    const pending = JSON.parse(rawPending);
+    const now = Date.now();
+
+    // Expire pending login token after 2 minutes
+    if (now - pending.timestamp > 120000) {
+      sessionStorage.removeItem('reclaim_pending_login');
+      return;
+    }
+
+    const domain = normalizeDomain(window.location.hostname);
+    if (domain !== pending.domain) return;
+
+    const href = window.location.href.toLowerCase();
+    const path = window.location.pathname.toLowerCase();
+
+    // Check for login error messages on page (e.g. failed login attempt)
+    const bodyText = (document.body ? document.body.innerText || '' : '').toLowerCase().substring(0, 2000);
+    const hasLoginError = [
+      'invalid password', 'incorrect password', 'wrong password',
+      'invalid credentials', 'login failed', 'authentication failed',
+      'user not found', 'invalid email'
+    ].some(err => bodyText.includes(err));
+
+    if (hasLoginError) {
+      sessionStorage.removeItem('reclaim_pending_login');
+      return;
+    }
+
+    // Check 1: Post-login URLs / paths
+    const isLoginSuccessUrl = [
+      '/dashboard', '/home', '/feed', '/user', '/account',
+      '/profile', '/overview', '/welcome', '/main', '/portal'
+    ].some(p => path.includes(p) || href.includes(p)) || (!href.includes('login') && !href.includes('signin'));
+
+    // Check 2: DOM confirmation messages / indicators
+    const isLoginSuccessText = [
+      'welcome back', 'logged in', 'sign out', 'logout',
+      'my account', 'user profile', 'signed in as'
+    ].some(kw => bodyText.includes(kw));
+
+    // Check 3: Post-submit navigation away from login page
+    const isPostSubmitNav = document.referrer && document.referrer !== window.location.href && (document.referrer.includes('login') || document.referrer.includes('signin'));
+
+    if (isLoginSuccessUrl || isLoginSuccessText || isPostSubmitNav) {
+      sessionStorage.removeItem('reclaim_pending_login');
+
+      const sessionConfirmedKey = 'reclaim_confirmed_login_' + pending.eventId;
+      if (sessionStorage.getItem(sessionConfirmedKey)) return;
+      sessionStorage.setItem(sessionConfirmedKey, '1');
+
+      // Trigger 30-second automatic overlay display on successful login!
+      triggerAutomaticOverlay();
+    }
+  } catch (err) {}
+}
+
+/**
  * Intercepts form submission and sends sanitized exposure metadata only.
  */
 function handleFormSubmit(form) {
@@ -275,7 +372,7 @@ function handleFormSubmit(form) {
   const dataTypes = detectDataCategories(inputs);
   const consents = detectConsentCategories(inputs);
 
-  // Registration flow detection - sets pending token if registration form
+  // Registration & Login flow detection
   if (isRegistrationForm(form)) {
     const regToken = {
       domain: normalizeDomain(window.location.hostname),
@@ -284,6 +381,15 @@ function handleFormSubmit(form) {
     };
     try {
       sessionStorage.setItem('reclaim_pending_registration', JSON.stringify(regToken));
+    } catch (e) {}
+  } else if (isLoginForm(form)) {
+    const loginToken = {
+      domain: normalizeDomain(window.location.hostname),
+      timestamp: Date.now(),
+      eventId: 'login_' + Math.random().toString(36).substring(2, 11)
+    };
+    try {
+      sessionStorage.setItem('reclaim_pending_login', JSON.stringify(loginToken));
     } catch (e) {}
   }
 
@@ -330,9 +436,13 @@ document.addEventListener('submit', (e) => {
   }
 }, true);
 
-// Check for registration confirmation on load and SPA navigation
+// Check for registration and login confirmation on load and SPA navigation
 checkForRegistrationConfirmation();
-window.addEventListener('load', checkForRegistrationConfirmation);
+checkForLoginConfirmation();
+window.addEventListener('load', () => {
+  checkForRegistrationConfirmation();
+  checkForLoginConfirmation();
+});
 
 // Passively notify background script of website page navigation (for Recent Website Activity tracking)
 if (window.location.protocol.startsWith('http')) {
@@ -393,8 +503,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  // Track current URL for SPA detection
+  // Track current URL and normalized domain for SPA detection and same-domain path filtering
   let _lastOverlayUrl = window.location.href;
+  let _lastOverlayDomain = '';
 
   // We store a reference to the shadow root since mode:'closed' doesn't expose it
   let _shadowRef = null;
@@ -1008,6 +1119,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Overlay injection
   // -------------------------------------------------------
 
+  let _automaticOverlayTimer = null;
+
+  /**
+   * Automatically triggers/refreshes the in-page Shadow DOM overlay and starts/resets the 30-second timer.
+   */
+  function triggerAutomaticOverlay() {
+    const domain = overlayNormalizeDomain(window.location.hostname);
+    if (!domain || domain === 'unknown' || isExcludedPage() || isDismissed(domain)) {
+      return;
+    }
+
+    _lastOverlayDomain = domain;
+
+    injectOverlay();
+
+    const host = document.getElementById(OVERLAY_HOST_ID);
+    if (host) {
+      host.style.display = 'block';
+    }
+
+    refreshOverlayUI();
+
+    if (_automaticOverlayTimer) {
+      clearTimeout(_automaticOverlayTimer);
+      _automaticOverlayTimer = null;
+    }
+
+    _automaticOverlayTimer = setTimeout(() => {
+      hideAutomaticOverlay();
+    }, 30000);
+  }
+
+  /**
+   * Automatically hides the in-page overlay after 30 seconds.
+   * Modifies ONLY UI visibility. Does NOT delete data, reset webCount/exposureCount, or alter persistent state.
+   */
+  function hideAutomaticOverlay() {
+    if (_automaticOverlayTimer) {
+      clearTimeout(_automaticOverlayTimer);
+      _automaticOverlayTimer = null;
+    }
+
+    const host = document.getElementById(OVERLAY_HOST_ID);
+    if (host) {
+      host.style.display = 'none';
+    }
+  }
+
   function injectOverlay() {
     const domain = overlayNormalizeDomain(window.location.hostname);
     if (!domain || domain === 'unknown') return;
@@ -1046,9 +1205,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         setDismissed(domain);
-        const hostEl = document.getElementById(OVERLAY_HOST_ID);
-        if (hostEl) hostEl.remove();
-        _shadowRef = null;
+        hideAutomaticOverlay();
       });
     }
 
@@ -1066,6 +1223,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   function removeOverlay() {
+    hideAutomaticOverlay();
     const existing = document.getElementById(OVERLAY_HOST_ID);
     if (existing) existing.remove();
     _shadowRef = null;
@@ -1076,15 +1234,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------------------------------------------
 
   function handleUrlChange() {
+    const currentDomain = overlayNormalizeDomain(window.location.hostname);
     const currentUrl = window.location.href;
+
     if (currentUrl === _lastOverlayUrl) return;
     _lastOverlayUrl = currentUrl;
 
-    // Remove existing overlay (domain may have changed)
+    // Do NOT re-trigger automatic overlay on same-domain URL/path changes
+    if (currentDomain === _lastOverlayDomain) {
+      return;
+    }
+
+    _lastOverlayDomain = currentDomain;
+
+    // Remove existing overlay for previous domain
     removeOverlay();
 
-    // Re-inject for new URL after a brief settling delay
-    setTimeout(() => injectOverlay(), 300);
+    // Re-inject & start 30s timer for new domain after a brief settling delay
+    setTimeout(() => triggerAutomaticOverlay(), 300);
   }
 
   // popstate (back/forward)
@@ -1124,13 +1291,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   });
 
   // -------------------------------------------------------
-  // Initial display
+  // Initial display — triggers 30s automatic overlay
   // -------------------------------------------------------
   if (document.readyState === 'complete') {
-    setTimeout(injectOverlay, 400);
+    setTimeout(triggerAutomaticOverlay, 400);
   } else {
     window.addEventListener('load', () => {
-      setTimeout(injectOverlay, 400);
+      setTimeout(triggerAutomaticOverlay, 400);
     });
   }
 
