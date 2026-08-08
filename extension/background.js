@@ -10,7 +10,8 @@ const MAX_RECENT_VISITS = 5;      // Strict 5-item limit for Recent Website Acti
  */
 function normalizeDomain(hostname) {
   if (!hostname) return '';
-  let domain = hostname.toLowerCase().trim().split(':')[0];
+  let domain = hostname.toLowerCase().trim().replace(/^https?:\/\//, '');
+  domain = domain.split('/')[0].split(':')[0];
   if (domain.startsWith('www.')) {
     domain = domain.substring(4);
   }
@@ -673,6 +674,11 @@ async function processWebsiteVisit(data) {
     const exists = visitedWebsitesSet.has(domain);
     let isNewUniqueVisit = false;
 
+    console.log(`[PrivacyLens Extension] Detected domain: ${data.domain || rawDomain || rawUrl}`);
+    console.log(`[PrivacyLens Extension] Normalized domain: ${domain}`);
+    console.log(`[PrivacyLens Extension] Existing website found: ${exists}`);
+    console.log(`[PrivacyLens Extension] New website: ${!exists}`);
+
     // Step 2: If domain does NOT exist in Set -> add, update webCount, persist to chrome.storage.local
     if (!exists) {
       visitedWebsitesSet.add(domain);
@@ -716,19 +722,32 @@ async function processWebsiteVisit(data) {
  * Asynchronously syncs visit metadata to Google Docs / external backend without blocking real-time count
  */
 async function syncVisitToGoogleDocs(visitData) {
+  const storage = await chrome.storage.local.get(['session']);
+  const userId = (storage.session && storage.session.user && storage.session.user.id) ? storage.session.user.id : 'usr_12345';
+
+  const payload = {
+    userId,
+    domain: visitData.domain,
+    eventType: 'WEBSITE_VISIT',
+    timestamp: visitData.timestamp,
+    source: 'PRIVACY_LENS_AUTO_SYNC'
+  };
+
   try {
-    await fetch(BACKEND_API, {
+    const res = await fetch(BACKEND_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        domain: visitData.domain,
-        eventType: 'WEBSITE_VISIT',
-        timestamp: visitData.timestamp,
-        source: 'PRIVACY_LENS_AUTO_SYNC'
-      })
+      body: JSON.stringify(payload)
     });
+    if (res.ok) {
+      // Sync any offline pending events
+      syncPendingEvents().catch(() => {});
+    } else {
+      await enqueuePendingEvent(payload);
+    }
   } catch (err) {
-    // Offline resilience - backend/Google Docs sync fails silently without affecting local fast webCount
+    // Offline resilience - queue pending event
+    await enqueuePendingEvent(payload);
   }
 }
 
@@ -832,6 +851,10 @@ async function processExposureEvent(event) {
 
     const now = new Date().toISOString();
     const existing = exposures[domain];
+    const exists = !!existing;
+
+    console.log(`[PrivacyLens Extension] Login detected: true`);
+    console.log(`[PrivacyLens Extension] Exposure already exists: ${exists}`);
 
     const { riskLevel, riskReasons } = evaluateRisk(event.dataTypes || [], event.consents || [], now);
 
@@ -896,7 +919,11 @@ async function processExposureEvent(event) {
  * Transmits metadata payload to backend if available
  */
 async function sendToBackend(event) {
+  const storage = await chrome.storage.local.get(['session']);
+  const userId = (storage.session && storage.session.user && storage.session.user.id) ? storage.session.user.id : 'usr_12345';
+
   const backendPayload = {
+    userId,
     domain: normalizeDomain(event.domain),
     dataTypes: event.dataTypes || [],
     consents: event.consents || [],
@@ -906,12 +933,188 @@ async function sendToBackend(event) {
   };
 
   try {
-    await fetch(BACKEND_API, {
+    const res = await fetch(BACKEND_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(backendPayload)
     });
+    if (res.ok) {
+      syncPendingEvents().catch(() => {});
+    } else {
+      await enqueuePendingEvent(backendPayload);
+    }
   } catch (err) {
-    // Offline resilience - backend is optional for local extension operation
+    // Offline resilience - queue pending event
+    await enqueuePendingEvent(backendPayload);
   }
 }
+
+// ==========================================
+// REAL-TIME SSE SYNC INFRASTRUCTURE (MV3 COMPATIBLE)
+// ==========================================
+
+let sseConnection = null;
+
+async function startSseSync(userId) {
+  if (sseConnection) {
+    sseConnection.abort();
+    sseConnection = null;
+  }
+
+  const controller = new AbortController();
+  sseConnection = controller;
+
+  console.log(`[PrivacyLens Sync] Establishing real-time connection for user ${userId}...`);
+
+  try {
+    const response = await fetch(`http://localhost:5000/api/realtime/${userId}`, {
+      signal: controller.signal
+    });
+
+    if (!response.body) {
+      console.error('[PrivacyLens Sync] Real-time stream failed: empty response body.');
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    // Sync any pending offline events upon reconnect
+    syncPendingEvents().catch(() => {});
+
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            console.log(`[PrivacyLens Sync] Website count: ${data.websiteCount}`);
+            console.log(`[PrivacyLens Sync] Exposure count: ${data.exposureCount}`);
+
+            // 1. Sync visitedWebsitesSet in-memory
+            const domains = (data.records || []).map(r => r.domain);
+            visitedWebsitesSet = new Set(domains);
+
+            // 2. Sync local exposures object from backend
+            const localData = await chrome.storage.local.get(['exposures']);
+            const exposures = localData.exposures || {};
+            let exposuresChanged = false;
+
+            (data.records || []).forEach(backendRec => {
+              const dom = backendRec.domain;
+              if (backendRec.loginDetected) {
+                if (!exposures[dom]) {
+                  exposures[dom] = {
+                    id: 'exp_' + Math.random().toString(36).substring(2, 11),
+                    domain: dom,
+                    firstSeen: new Date().toISOString(),
+                    lastSeen: new Date().toISOString(),
+                    dataTypes: ['email'],
+                    consentTypes: ['essential'],
+                    eventCount: 1,
+                    accountExposure: 'possible',
+                    riskLevel: 'medium',
+                    riskReasons: ['Detected Account relationship'],
+                    cleanupStatus: 'RECOMMENDED'
+                  };
+                  exposuresChanged = true;
+                } else if (exposures[dom].accountExposure !== 'confirmed' && exposures[dom].accountExposure !== 'possible') {
+                  exposures[dom].accountExposure = 'possible';
+                  exposuresChanged = true;
+                }
+              } else {
+                // Remove login exposure locally if database indicates no loginDetected
+                if (exposures[dom]) {
+                  delete exposures[dom];
+                  exposuresChanged = true;
+                }
+              }
+            });
+
+            const storageUpdate = {
+              webCount: data.websiteCount,
+              exposureCount: data.exposureCount,
+              visitedWebsites: domains
+            };
+
+            if (exposuresChanged) {
+              storageUpdate.exposures = exposures;
+            }
+
+            await chrome.storage.local.set(storageUpdate);
+
+            // Trigger local extension UI updates
+            chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+          } catch (e) {
+            console.error('[PrivacyLens Sync] Failed to parse real-time update payload:', e);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.warn('[PrivacyLens Sync] Connection lost. Reconnecting in 5s...', err.message);
+      setTimeout(() => startSseSync(userId), 5000);
+    }
+  }
+}
+
+async function enqueuePendingEvent(payload) {
+  try {
+    const data = await chrome.storage.local.get(['pendingPrivacyEvents']);
+    const queue = data.pendingPrivacyEvents || [];
+    // Deduplicate in the queue by matching domain & eventType
+    const duplicate = queue.some(item => item.domain === payload.domain && item.eventType === payload.eventType);
+    if (!duplicate) {
+      queue.push(payload);
+      await chrome.storage.local.set({ pendingPrivacyEvents: queue });
+      console.log('[PrivacyLens Sync] Event queued offline:', payload.domain);
+    }
+  } catch (err) {
+    console.error('[PrivacyLens Sync] Failed to queue event:', err);
+  }
+}
+
+async function syncPendingEvents() {
+  try {
+    const data = await chrome.storage.local.get(['pendingPrivacyEvents']);
+    const queue = data.pendingPrivacyEvents || [];
+    if (queue.length === 0) return;
+
+    console.log(`[PrivacyLens Sync] Syncing ${queue.length} pending offline events...`);
+    for (const event of queue) {
+      await fetch(BACKEND_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event)
+      });
+    }
+
+    await chrome.storage.local.set({ pendingPrivacyEvents: [] });
+    console.log('[PrivacyLens Sync] Offline queue synced successfully.');
+  } catch (err) {
+    console.error('[PrivacyLens Sync] Offline queue sync failed:', err.message);
+  }
+}
+
+// Start SSE connection on startup
+chrome.storage.local.get(['session'], (data) => {
+  const userId = (data.session && data.session.user && data.session.user.id) ? data.session.user.id : 'usr_12345';
+  startSseSync(userId);
+});
+
+// Reconnect if session changes
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.session) {
+    const session = changes.session.newValue;
+    const userId = (session && session.user && session.user.id) ? session.user.id : 'usr_12345';
+    startSseSync(userId);
+  }
+});

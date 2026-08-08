@@ -113,8 +113,8 @@ export const LoginPage = () => {
         
         {/* Logo / Title Area */}
         <div className="flex flex-col items-center mb-6">
-          <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-beige-900 via-beige-800 to-beige-700 shadow-lg shadow-beige-900/20 border border-beige-400/30 mb-3">
-            <Shield className="w-8 h-8 text-beige-50" />
+          <div className="relative mb-3">
+            <img src="/privacylens-logo.svg" alt="PrivacyLens Logo" className="w-16 h-16 rounded-2xl shadow-lg shadow-beige-900/20 border border-beige-400/30 object-cover" />
             <Sparkles className="w-4 h-4 text-beige-300 absolute -top-1 -right-1 animate-pulse" />
           </div>
           <h1 className="font-heading font-extrabold text-3xl text-slate-900 dark:text-white tracking-tight">

@@ -1,0 +1,699 @@
+URGENT BUG — SUCCESSFUL ACCOUNT CREATION / LOGIN IS NOT INCREASING EXPOSURE
+
+I have reproduced the issue.
+
+Current PrivacyLens extension behavior:
+
+Website:
+leetcode.com
+
+The extension correctly detects the website.
+
+Current values:
+
+Websites: 13
+Exposures: 0
+High Risk: 0
+
+I then created a NEW account on LeetCode and successfully logged into that account.
+
+However:
+
+Exposures remained 0.
+
+This means the unique website tracking is working, but successful account creation/login is NOT updating the website's exposure/account state.
+
+DO NOT modify the working unique website-count logic.
+
+We need to debug and fix ONLY the account relationship / exposure detection pipeline.
+
+==================================================
+EXPECTED BEHAVIOR
+==================================================
+
+Before visiting/logging into LeetCode:
+
+If leetcode.com is already detected:
+
+Websites = 13
+Exposures = 0
+
+User then successfully creates an account and logs in:
+
+Websites = 13
+Exposures = 1
+
+Dashboard:
+
+Digital Footprint = 13
+Active Consents = 1
+
+If the user logs in again later:
+
+Websites = 13
+Exposures = 1
+
+NOT 2.
+
+==================================================
+IMPORTANT DISTINCTION
+==================================================
+
+The system must distinguish between:
+
+1. Website visit
+2. Login page visit
+3. Login form detection
+4. Login attempt
+5. Failed login
+6. Successful login
+7. Account creation/signup
+8. Existing account relationship
+
+Only #6 and #7 should be capable of creating an exposure/account relationship.
+
+These MUST NOT increase exposure:
+
+- Opening login page
+- Finding a password input
+- Finding an email input
+- Typing into login fields
+- Clicking login
+- Failed login
+- Refreshing the page
+- Navigating the website
+- Opening multiple tabs
+
+==================================================
+CURRENT BUG
+==================================================
+
+The current flow appears to be:
+
+Website detected
+        ↓
+Website record created
+        ↓
+loginDetected remains false
+        ↓
+Exposure = 0
+
+Even after:
+
+Account successfully created
+        ↓
+Successful login
+        ↓
+loginDetected should become true
+
+but apparently this state transition is not happening.
+
+Find out exactly why.
+
+==================================================
+FIRST: INSPECT THE EXISTING CODE
+==================================================
+
+DO NOT immediately rewrite anything.
+
+Trace the complete authentication/exposure pipeline.
+
+Find:
+
+1. Where website records are created
+2. Where login detection occurs
+3. Whether signup detection exists
+4. Whether successful login detection exists
+5. What event is generated after successful login
+6. How that event is sent from content script/background worker
+7. How backend receives it
+8. How database updates the website record
+9. How loginDetected is stored
+10. How exposure count is calculated
+11. How dashboard Active Consents receives the count
+
+Report the exact files/functions responsible for each stage.
+
+==================================================
+CHECK THE FOLLOWING POSSIBILITY
+==================================================
+
+The extension may currently only detect:
+
+- login form
+- password field
+- login button
+
+but NOT successful authentication.
+
+For example, it may have logic like:
+
+if (passwordInputDetected) {
+    loginDetected = true;
+}
+
+or:
+
+if (loginFormFound) {
+    sendLoginEvent();
+}
+
+This is NOT sufficient.
+
+A login form is not proof of an account relationship.
+
+==================================================
+SUCCESSFUL LOGIN DETECTION
+==================================================
+
+Implement the most reliable detection possible within the current architecture.
+
+Because websites differ, do NOT assume one universal DOM selector works for every website.
+
+For the hackathon MVP, support a layered detection strategy.
+
+LEVEL 1 — DEMO WEBSITE / CONTROLLED WEBSITE
+
+For our own demo website, implement deterministic successful-login/account-creation detection.
+
+Example:
+
+User submits signup successfully.
+
+Demo website emits a clear event/state.
+
+Extension detects:
+
+ACCOUNT_CREATED
+
+Then:
+
+loginDetected = true
+
+OR:
+
+User successfully logs in.
+
+Extension detects:
+
+LOGIN_SUCCESS
+
+Then:
+
+loginDetected = true
+
+This MUST work reliably for the hackathon demonstration.
+
+--------------------------------------------------
+
+LEVEL 2 — HEURISTIC DETECTION FOR OTHER WEBSITES
+
+Where technically possible, detect indicators such as:
+
+- URL transition from /login to authenticated area
+- Login form disappearing after successful submission
+- Presence of authenticated-only UI
+- User profile/avatar/account menu appearing
+- Logout button appearing
+- Known authenticated-page indicators
+
+But do NOT rely on a single generic selector for all websites.
+
+--------------------------------------------------
+
+LEVEL 3 — USER CONFIRMATION FALLBACK
+
+If automatic detection is uncertain, provide a safe fallback:
+
+"Did you just create/log into an account on this website?"
+
+[Yes, mark as account]
+
+This can be used for websites where automatic successful-login detection is unreliable.
+
+For the hackathon, this is much better than falsely claiming universal automatic detection.
+
+==================================================
+ACCOUNT CREATION
+==================================================
+
+This is particularly important.
+
+I tested:
+
+CREATE NEW ACCOUNT
+        ↓
+SUCCESSFUL ACCOUNT CREATION
+        ↓
+LOGIN
+
+The exposure did not increase.
+
+If account creation is successfully completed, the system should be able to mark:
+
+accountRelationship = true
+
+for that normalized domain.
+
+Example:
+
+leetcode.com
+
+{
+    loginDetected: true,
+    accountRelationship: true
+}
+
+Then:
+
+Exposure count = 1
+
+==================================================
+DATABASE STATE
+==================================================
+
+Use a state model similar to:
+
+{
+    userId,
+    normalizedDomain,
+    displayName,
+
+    firstSeenAt,
+    lastSeenAt,
+
+    accountRelationship: boolean,
+
+    loginDetected: boolean,
+
+    accountDetectedAt: timestamp,
+
+    updatedAt: timestamp
+}
+
+For the current MVP:
+
+Exposure should be based on:
+
+accountRelationship === true
+
+or the existing equivalent field if the project already has one.
+
+Do not create duplicate exposure records.
+
+==================================================
+IMPORTANT: DO NOT USE COUNTER INCREMENTS
+==================================================
+
+Do NOT implement:
+
+exposureCount++
+
+when a login event occurs.
+
+Instead:
+
+1. Find the user's existing website record.
+2. Check whether accountRelationship is already true.
+3. If false:
+   set it to true.
+4. If already true:
+   do nothing.
+
+Then derive:
+
+exposureCount =
+number of unique website records
+where accountRelationship === true.
+
+==================================================
+EXAMPLE
+==================================================
+
+Database initially:
+
+leetcode.com
+
+accountRelationship = false
+
+Metrics:
+
+Websites = 13
+Exposures = 0
+
+After successful account creation:
+
+leetcode.com
+
+accountRelationship = true
+
+Metrics automatically become:
+
+Websites = 13
+Exposures = 1
+
+Dashboard:
+
+Digital Footprint = 13
+Active Consents = 1
+
+==================================================
+REAL-TIME REQUIREMENT
+==================================================
+
+After successful account creation/login:
+
+Extension should update immediately:
+
+Exposures: 1
+
+Dashboard should automatically update:
+
+Active Consents: 1
+
+No:
+
+- browser refresh
+- dashboard refresh
+- extension reopen
+- logout/login
+
+should be required.
+
+The update should flow through the existing central database/realtime mechanism.
+
+==================================================
+DEBUGGING LOGS
+==================================================
+
+Temporarily add detailed development logs.
+
+When account creation/login occurs:
+
+[RECLAIM AUTH]
+Domain: leetcode.com
+
+[RECLAIM AUTH]
+Possible account creation detected
+
+[RECLAIM AUTH]
+Possible login success detected
+
+[RECLAIM AUTH]
+Authentication confidence: ...
+
+[RECLAIM AUTH]
+Account relationship before: false
+
+[RECLAIM AUTH]
+Setting account relationship: true
+
+[RECLAIM AUTH]
+Database update completed
+
+[RECLAIM METRICS]
+Unique websites: 13
+
+[RECLAIM METRICS]
+Unique exposures: 1
+
+Then dashboard:
+
+[PRIVACYLENS REALTIME]
+Received metrics update
+
+[PRIVACYLENS METRICS]
+Digital footprint: 13
+
+[PRIVACYLENS METRICS]
+Active consents: 1
+
+DO NOT log:
+
+- passwords
+- OTPs
+- authentication tokens
+- cookies
+- credential values
+
+==================================================
+TEST THE EXACT LEETCODE SCENARIO
+==================================================
+
+Reproduce this exact flow:
+
+1. Open LeetCode.
+
+Expected:
+
+Website count increases only if leetcode.com is new.
+
+2. Go to account creation.
+
+Expected:
+
+Exposure remains unchanged.
+
+3. Fill signup form.
+
+Expected:
+
+Exposure remains unchanged until successful account creation.
+
+4. Submit signup.
+
+Expected:
+
+If account creation succeeds:
+
+accountRelationship = true
+
+5. Login if required.
+
+Expected:
+
+Exposure = 1.
+
+6. Refresh LeetCode.
+
+Expected:
+
+Exposure remains 1.
+
+7. Navigate around LeetCode.
+
+Expected:
+
+Exposure remains 1.
+
+8. Open LeetCode in another tab.
+
+Expected:
+
+Exposure remains 1.
+
+9. Log out.
+
+Expected:
+
+Exposure remains 1 because the user still has an account relationship with the website.
+
+10. Log in again.
+
+Expected:
+
+Exposure remains 1.
+
+==================================================
+FAILED LOGIN TEST
+==================================================
+
+Test:
+
+Open a login page.
+
+Enter incorrect credentials.
+
+Submit.
+
+Expected:
+
+Exposure remains unchanged.
+
+If website count was already 13:
+
+Websites = 13
+
+Exposure remains 0.
+
+==================================================
+MULTIPLE LOGIN TEST
+==================================================
+
+After successful login:
+
+Exposure = 1.
+
+Login 10 more times:
+
+Exposure = 1.
+
+Open 5 tabs:
+
+Exposure = 1.
+
+==================================================
+MULTIPLE WEBSITES
+==================================================
+
+Example:
+
+LeetCode account:
+Exposure = 1
+
+Amazon account:
+Exposure = 2
+
+YouTube account:
+Exposure = 3
+
+Expected:
+
+Websites = 13 or more depending on unique websites detected.
+
+Exposures = 3.
+
+==================================================
+DASHBOARD MAPPING
+==================================================
+
+Keep the existing MVP mapping:
+
+Extension:
+Websites → Dashboard:
+Digital Footprint Overview
+
+Extension:
+Exposures → Dashboard:
+Active Consents
+
+Therefore:
+
+Extension:
+Websites = 13
+Exposures = 1
+
+Dashboard:
+
+Digital Footprint = 13
+Active Consents = 1
+
+Both must come from the same backend state.
+
+==================================================
+DO NOT BREAK EXISTING WEBSITE TRACKING
+==================================================
+
+The screenshot confirms:
+
+Websites = 13
+
+and the Recent Website Activity correctly shows:
+
+leetcode.com
+store.epicgames.com
+localhost
+zee5.com
+teams.live.com
+
+Therefore the website tracking pipeline is currently functioning.
+
+DO NOT rewrite this unnecessarily.
+
+The required fix is specifically:
+
+SUCCESSFUL ACCOUNT CREATION / LOGIN
+        ↓
+ACCOUNT RELATIONSHIP STATE
+        ↓
+UNIQUE EXPOSURE COUNT
+        ↓
+REAL-TIME DASHBOARD
+
+==================================================
+IMPORTANT TECHNICAL LIMITATION
+==================================================
+
+Do not pretend that automatic login detection works universally across every website.
+
+Different websites use:
+
+- OAuth
+- redirects
+- SPA authentication
+- CAPTCHA
+- third-party authentication
+- SSO
+- custom login systems
+
+For the hackathon:
+
+Make the controlled demo website 100% reliable.
+
+For third-party websites:
+
+Use the best available heuristic detection.
+
+If confidence is insufficient, use a user-confirmation fallback.
+
+This is technically honest and acceptable.
+
+==================================================
+FINAL ACCEPTANCE CRITERIA
+==================================================
+
+The fix is complete only if:
+
+[ ] Creating a new account on the demo website creates an exposure.
+
+[ ] Successful login on the demo website creates an exposure.
+
+[ ] Failed login does not create an exposure.
+
+[ ] Opening login page does not create an exposure.
+
+[ ] Password field detection does not create an exposure.
+
+[ ] Repeated login does not increase exposure.
+
+[ ] Multiple tabs do not increase exposure.
+
+[ ] Logout does not incorrectly remove the historical account relationship.
+
+[ ] Website count remains unique.
+
+[ ] Exposure remains unique per domain.
+
+[ ] Dashboard Active Consents matches exposure count.
+
+[ ] Dashboard updates in real time.
+
+[ ] No manual refresh is required.
+
+[ ] No passwords or credentials are stored.
+
+[ ] Existing UI remains unchanged.
+
+[ ] Existing website-count functionality remains unchanged.
+
+[ ] The exact LeetCode test scenario has been investigated.
+
+BEFORE MAKING CHANGES:
+
+Tell me exactly why the current LeetCode account creation/login is not producing an exposure.
+
+Then identify the smallest set of files/functions that need to change.
+
+Then implement the fix.
+
+Do not rewrite unrelated parts of the project.

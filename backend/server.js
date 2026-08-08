@@ -10,6 +10,8 @@ const websiteController = require('./controllers/websiteController');
 const aiController = require('./controllers/aiController');
 const userController = require('./controllers/userController');
 const breachController = require('./controllers/breachController');
+const authController = require('./controllers/authController');
+const realtimeController = require('./controllers/realtimeController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,8 +34,15 @@ app.get('/api/health', (req, res) => {
 // Extension Events
 app.post('/api/events', eventController.handleEvent);
 
+// Authentication
+app.post('/api/auth/login', authController.login);
+app.post('/api/auth/register', authController.register);
+
 // Central Dashboard Data
 app.get('/api/dashboard/:userId', dashboardController.getDashboardData);
+
+// Realtime SSE updates
+app.get('/api/realtime/:userId', realtimeController.handleRealtime);
 
 // 3-Tier Privacy Requests
 app.post('/api/requests/create', requestController.createPrivacyRequest);
