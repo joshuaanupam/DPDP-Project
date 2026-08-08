@@ -62,6 +62,28 @@ function setupEventListeners() {
       chrome.tabs.create({ url: 'http://localhost:5173' });
     });
   }
+
+  const btnRefreshBrief = document.getElementById('btn-refresh-brief');
+  if (btnRefreshBrief) {
+    btnRefreshBrief.addEventListener('click', async () => {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.url && !isInternalUrl(activeTab.url)) {
+          const urlObj = new URL(activeTab.url);
+          const domain = normalizeDomain(urlObj.hostname);
+          const activeTabState = {
+            domain: domain,
+            url: activeTab.url,
+            title: activeTab.title || urlObj.hostname,
+            status: 'success'
+          };
+          await loadWebsiteBrief(activeTabState, activeTab.id, true);
+        }
+      } catch (err) {
+        console.error('Refresh brief click error:', err);
+      }
+    });
+  }
 }
 
 /**
@@ -218,6 +240,9 @@ async function refreshUI() {
 
   // Render Recent Website Activity List (rolling 5 most recently visited unique domains)
   renderRecentVisits(visits);
+
+  // Load and Render Website Brief Feature
+  await loadWebsiteBrief(activeTabState, activeTabId);
 }
 
 /**
@@ -381,4 +406,93 @@ function renderRecentVisits(visits) {
 
     listEl.appendChild(item);
   });
+}
+
+/**
+ * Loads, caches, and renders the AI-powered Website Brief.
+ * Uses message passing to fetch DOM metadata from content script,
+ * then fetches from backend controller and caches in local storage.
+ */
+async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = false) {
+  const card = document.getElementById('website-brief-card');
+  const siteTitle = document.getElementById('brief-site-title');
+  const textEl = document.getElementById('brief-text');
+
+  if (!card || !siteTitle || !textEl) return;
+
+  // 1. Safe visibility guard: Hide brief card on loading, internal, or error tab states
+  if (activeTabState.status !== 'success' || !activeTabState.domain) {
+    card.style.display = 'none';
+    return;
+  }
+
+  const domain = activeTabState.domain;
+  card.style.display = 'block';
+
+  // 2. Local Storage Cache Check
+  const storage = await chrome.storage.local.get('websiteBriefs');
+  const briefs = storage.websiteBriefs || {};
+
+  if (briefs[domain] && !forceRefresh) {
+    siteTitle.textContent = briefs[domain].siteName || domain;
+    textEl.textContent = briefs[domain].brief;
+    return;
+  }
+
+  // 3. Initiate summary fetch
+  siteTitle.textContent = domain;
+  textEl.innerHTML = '🔄 <span style="color: #64748b; font-style: italic;">Generating AI summary...</span>';
+
+  // Extract metadata (title, headings, descriptions) using content script message passing
+  let domMetadata = {
+    title: activeTabState.title,
+    metaDescription: '',
+    headings: []
+  };
+
+  if (activeTabId) {
+    try {
+      const response = await chrome.tabs.sendMessage(activeTabId, { type: 'GET_DOM_METADATA' }).catch(() => null);
+      if (response) {
+        domMetadata = response;
+      }
+    } catch (e) {
+      console.warn('Could not contact content script for DOM metadata:', e.message);
+    }
+  }
+
+  // Submit to backend API securely (protects Gemini API key on the backend)
+  try {
+    const apiResponse = await fetch('http://localhost:5000/api/ai/website-brief', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        domain: domain,
+        title: domMetadata.title || activeTabState.title,
+        metaDescription: domMetadata.metaDescription || '',
+        headings: domMetadata.headings || []
+      })
+    });
+
+    const data = await apiResponse.json();
+    if (data && data.success) {
+      // Update Cache
+      briefs[domain] = {
+        siteName: data.siteName,
+        brief: data.brief
+      };
+      await chrome.storage.local.set({ websiteBriefs: briefs });
+
+      // Display
+      siteTitle.textContent = data.siteName || domain;
+      textEl.textContent = data.brief;
+    } else {
+      textEl.textContent = data.brief || 'Unable to generate a reliable website summary.';
+    }
+  } catch (err) {
+    console.error('Error fetching website brief:', err);
+    textEl.textContent = 'Website summary unavailable.';
+  }
 }

@@ -331,9 +331,215 @@ Timestamp: ${new Date().toISOString()}`;
   };
 }
 
+/**
+ * Generates a short 3-line Website Brief specifically for the current domain/webpage.
+ * Automatically falls back to deterministic parsing if Gemini is offline/disabled.
+ *
+ * @param {object} params
+ * @param {string} params.domain - Current normalized domain (e.g., github.com)
+ * @param {string} params.title - Active page document title
+ * @param {string} params.metaDescription - Content of description meta tags
+ * @param {Array<string>} params.headings - List of h1/h2 text values on page
+ * @returns {Promise<{
+ *   success: boolean,
+ *   siteName: string,
+ *   brief: string,
+ *   isFallback: boolean
+ * }>}
+ */
+async function generateWebsiteBrief({ domain, title, metaDescription, headings = [] }) {
+  const normDomain = (domain || '').toLowerCase().trim();
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  // 1. Fast Local Database lookup for popular websites (Standard/Consistent Fallbacks)
+  const popularSites = {
+    'youtube.com': {
+      siteName: 'YouTube',
+      brief: 'YouTube is a video-sharing platform for watching, uploading, and interacting with videos.\nUsers can subscribe to channels, comment on videos, create playlists, and manage their content preferences.\nThe platform primarily provides personalized video content and creator-based entertainment.'
+    },
+    'github.com': {
+      siteName: 'GitHub',
+      brief: 'GitHub is a platform for hosting and collaborating on software development projects using Git repositories.\nUsers can create repositories, contribute code, review changes, manage issues, and collaborate with developers.\nThe platform primarily supports software development, version control, and open-source collaboration.'
+    },
+    'amazon.com': {
+      siteName: 'Amazon',
+      brief: 'Amazon is an online marketplace where users can search for and purchase products from different categories.\nUsers can manage orders, payments, addresses, reviews, returns, and personalized shopping preferences.\nThe platform primarily provides e-commerce, product discovery, purchasing, and delivery services.'
+    },
+    'amazon.in': {
+      siteName: 'Amazon India',
+      brief: 'Amazon India is an online marketplace where users can search for and purchase products from different categories.\nUsers can manage orders, payments, addresses, reviews, returns, and personalized shopping preferences.\nThe platform primarily provides e-commerce, product discovery, purchasing, and delivery services.'
+    },
+    'google.com': {
+      siteName: 'Google',
+      brief: 'Google is a web search engine and digital services platform for information retrieval and online tools.\nUsers can query terms, manage Google account services, search media, and customize search options.\nThe platform primarily provides internet search, information discovery, and digital cloud services.'
+    },
+    'wikipedia.org': {
+      siteName: 'Wikipedia',
+      brief: 'Wikipedia is a free multilingual online encyclopedia written and maintained by a community of volunteers.\nUsers can search topics, read articles, edit reference pages, and contribute to the knowledge database.\nThe platform primarily provides free educational information, crowdsourced reference, and research databases.'
+    },
+    'netflix.com': {
+      siteName: 'Netflix',
+      brief: 'Netflix is a subscription-based streaming service offering a library of films and television programs.\nUsers can browse categories, stream videos, manage watchlists, and configure profile preferences.\nThe platform primarily provides digital entertainment, video-on-demand streaming, and personalized media content.'
+    }
+  };
+
+  // If it's a known popular site, return immediately
+  if (popularSites[normDomain]) {
+    return {
+      success: true,
+      ...popularSites[normDomain],
+      isFallback: true
+    };
+  }
+
+  // 2. Try live Gemini API if key is present
+  if (apiKey) {
+    try {
+      const briefResult = await callGeminiWebsiteBriefAPI({ domain, title, metaDescription, headings, apiKey });
+      if (briefResult && briefResult.siteName && briefResult.brief) {
+        return {
+          success: true,
+          siteName: briefResult.siteName,
+          brief: briefResult.brief,
+          isFallback: false
+        };
+      }
+    } catch (err) {
+      console.warn(`[aiService] Gemini Website Brief failed: ${err.message}. Using rule-based fallback.`);
+    }
+  }
+
+  // 3. Fallback Parser for custom websites (e.g. college websites, custom sites)
+  const titleLower = (title || '').toLowerCase();
+  const descLower = (metaDescription || '').toLowerCase();
+  const combinedText = `${normDomain} ${titleLower} ${descLower} ${(headings || []).join(' ').toLowerCase()}`;
+
+  let siteName = domain.split('.')[0].toUpperCase();
+  if (title && title.length > 3 && title.length < 30) {
+    siteName = title.split('|')[0].split('-')[0].trim();
+  }
+
+  // College / Educational website detection
+  if (combinedText.includes('college') || combinedText.includes('university') || combinedText.includes('.edu') || combinedText.includes('academic') || combinedText.includes('student')) {
+    return {
+      success: true,
+      siteName: siteName || 'Educational Institution',
+      brief: `${siteName} is an educational institution website providing academic and campus details.\nUsers can explore offered courses, check admission guidelines, look up departments, and access student portals.\nThe platform primarily supports educational access, academic administration, and student resources.`,
+      isFallback: true
+    };
+  }
+
+  // E-commerce fallback
+  if (combinedText.includes('shop') || combinedText.includes('store') || combinedText.includes('cart') || combinedText.includes('checkout') || combinedText.includes('buy')) {
+    return {
+      success: true,
+      siteName: siteName || 'Online Store',
+      brief: `${siteName} is an online shopping platform where users can browse and buy products.\nUsers can look up catalog items, manage shopping carts, write reviews, and make online payments.\nThe platform primarily provides e-commerce, product discovery, and purchasing services.`,
+      isFallback: true
+    };
+  }
+
+  // Generic website heuristic (if some minimum page title exists)
+  if (title && title.trim().length > 0) {
+    return {
+      success: true,
+      siteName: siteName,
+      brief: `${siteName} is a web platform for digital content and information access.\nUsers can navigate pages, explore services, and interact with public web details.\nThe site primarily supports online engagement, user communication, or service discovery.`,
+      isFallback: true
+    };
+  }
+
+  // If unable to identify at all (no title, empty info)
+  return {
+    success: false,
+    siteName: domain,
+    brief: 'Unable to generate a reliable website summary.',
+    isFallback: true
+  };
+}
+
+/**
+ * Invokes Gemini to analyze page metadata and generate a 3-line Website Brief.
+ */
+async function callGeminiWebsiteBriefAPI({ domain, title, metaDescription, headings, apiKey }) {
+  const prompt = `You are PrivacyLens AI, an expert digital analyst.
+Analyze the following public page details for a website:
+- Domain: ${domain}
+- Page Title: ${title || 'N/A'}
+- Meta Description: ${metaDescription || 'N/A'}
+- Headings: ${(headings || []).slice(0, 3).join(', ') || 'N/A'}
+
+Identify the exact website name/identity and generate a very short 3-line summary of this EXACT website.
+The summary must answer exactly these 3 questions, with each answer on a new line (max 1 sentence per line):
+1. What exactly is this website/platform?
+2. What are the main things users can do on this website?
+3. What is the main purpose/use of the website?
+
+Do not generate a long paragraph. Do not be generic (e.g. do not just say "This is an e-commerce website", say what it specifically is).
+Return in STRICT JSON format:
+{
+  "siteName": "Actual Website Name",
+  "brief": "Line 1 answering what it is.\\nLine 2 answering what users can do.\\nLine 3 answering its main purpose."
+}`;
+
+  const payload = JSON.stringify({
+    contents: [
+      {
+        parts: [{ text: prompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 256,
+      responseMimeType: "application/json"
+    }
+  });
+
+  return new Promise((resolve, reject) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const req = https.request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      },
+      timeout: DEFAULT_TIMEOUT_MS
+    }, (res) => {
+      let rawData = '';
+      res.on('data', chunk => { rawData += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const parsed = JSON.parse(rawData);
+            const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              resolve(JSON.parse(text));
+              return;
+            }
+            reject(new Error('Empty response from Gemini'));
+          } catch (e) {
+            reject(e);
+          }
+        } else {
+          reject(new Error(`Status ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Timeout'));
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 module.exports = {
   summarizePrivacyPolicy,
   generateRuleBasedSummary,
   generateLegalNotice,
-  callGeminiAPI
+  callGeminiAPI,
+  generateWebsiteBrief
 };

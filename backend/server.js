@@ -63,6 +63,7 @@ app.post('/api/demo/reset', async (req, res) => {
 
 // AI Policy Summarizer
 app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
+app.post('/api/ai/website-brief', aiController.getWebsiteBrief);
 
 // Authentication Routes
 app.post('/api/auth/login', async (req, res, next) => {

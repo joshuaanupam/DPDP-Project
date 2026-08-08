@@ -323,6 +323,22 @@
       <div id="child-safe-alert-container"></div>
     </div>
 
+    <!-- Website Brief Card -->
+    <div class="card" id="website-brief-card" style="display: none;">
+      <div class="card-title">
+        <span>Website Brief</span>
+        <span id="btn-refresh-brief" style="cursor: pointer; color: var(--primary); font-size: 11px; font-weight: 700; transition: color 0.2s;">[Refresh]</span>
+      </div>
+      <div id="brief-content" style="font-size: 12px; line-height: 1.5; color: var(--text);">
+        <div id="brief-site-name" style="font-weight: 700; font-size: 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+          <span id="brief-site-icon">🌐</span> <span id="brief-site-title">Detecting...</span>
+        </div>
+        <div id="brief-text" style="color: var(--text-muted); font-size: 11.5px; white-space: pre-line; line-height: 1.4;">
+          Loading summary...
+        </div>
+      </div>
+    </div>
+
     <!-- Child Safe Mode Control Card (§9) -->
     <div class="card" style="border-left: 4px solid #6366f1;">
       <div class="card-title">

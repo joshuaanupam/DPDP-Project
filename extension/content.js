@@ -963,9 +963,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------------------------------------------
   // Listen for live data updates from background
   // -------------------------------------------------------
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message && message.type === 'OVERLAY_DATA_UPDATE') {
       refreshOverlayUI();
+    } else if (message && message.type === 'GET_DOM_METADATA') {
+      try {
+        const metaDesc = document.querySelector('meta[name="description"]')?.content || 
+                         document.querySelector('meta[property="og:description"]')?.content || 
+                         document.querySelector('meta[property="twitter:description"]')?.content || '';
+        
+        const headings = Array.from(document.querySelectorAll('h1, h2'))
+          .slice(0, 3)
+          .map(h => h.innerText.trim())
+          .filter(t => t.length > 0);
+          
+        sendResponse({
+          title: document.title || '',
+          metaDescription: metaDesc || '',
+          headings: headings || []
+        });
+      } catch (err) {
+        sendResponse({ title: document.title || '', metaDescription: '', headings: [] });
+      }
+      return true;
     }
   });
 
