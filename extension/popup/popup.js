@@ -45,6 +45,16 @@ function setupEventListeners() {
       chrome.tabs.create({ url: 'http://localhost:5173' });
     });
   }
+
+  const toggleChildSafe = document.getElementById('toggle-child-safe');
+  if (toggleChildSafe) {
+    toggleChildSafe.addEventListener('change', async (e) => {
+      const enabled = e.target.checked;
+      await chrome.storage.local.set({ childSafeMode: enabled });
+      chrome.runtime.sendMessage({ type: 'TOGGLE_CHILD_SAFE_MODE', enableChildSafeMode: enabled }).catch(() => {});
+      refreshUI();
+    });
+  }
 }
 
 /**
@@ -98,10 +108,17 @@ function calculatePrivacyScore(exposuresObj) {
  * Main UI refresh loop - Single Source of Truth from active browser tab
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode']);
+  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode']);
   const allExposures = storage.exposures || {};
   let visits = storage.recentWebsiteVisits || [];
   const isDemo = storage.demoMode || false;
+  const isChildSafe = storage.childSafeMode || false;
+
+  // Update Child Safe Mode toggle UI
+  const toggleChildSafe = document.getElementById('toggle-child-safe');
+  if (toggleChildSafe) {
+    toggleChildSafe.checked = isChildSafe;
+  }
 
   // Filter exposure records and visits based on Demo Mode isolation
   const activeExposures = {};
@@ -125,6 +142,8 @@ async function refreshUI() {
     protocol: ''
   };
 
+  let activeTabId = null;
+
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
@@ -135,6 +154,7 @@ async function refreshUI() {
       activeTabState.url = activeTab.url;
       activeTabState.title = activeTab.title || 'Browser Internal Page';
     } else {
+      activeTabId = activeTab.id;
       const urlObj = new URL(activeTab.url);
       activeTabState.status = 'success';
       activeTabState.domain = normalizeDomain(urlObj.hostname);
@@ -146,14 +166,59 @@ async function refreshUI() {
     activeTabState.status = 'error';
   }
 
+  // Check webpage for indicators of behavioral tracking or targeted ads (§9)
+  let hasBehavioralTracking = false;
+
+  const currentExposure = activeExposures[activeTabState.domain];
+  if (currentExposure) {
+    // Check if recorded consent types include marketing/promotional or if risk reasons indicate tracking
+    if ((currentExposure.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
+      hasBehavioralTracking = true;
+    }
+    if ((currentExposure.riskReasons || []).some(r => r.toLowerCase().includes('marketing') || r.toLowerCase().includes('tracking'))) {
+      hasBehavioralTracking = true;
+    }
+  }
+
+  // Send query message to content script on active tab for real-time DOM script/ad-tech parsing
+  if (activeTabId && activeTabState.status === 'success') {
+    try {
+      const trackingRes = await chrome.tabs.sendMessage(activeTabId, { type: 'CHECK_BEHAVIORAL_TRACKING' }).catch(() => null);
+      if (trackingRes && trackingRes.hasBehavioralTracking) {
+        hasBehavioralTracking = true;
+      }
+    } catch (err) {}
+  }
+
   // Render Current Active Site Card
-  renderCurrentSite(activeTabState, activeExposures[activeTabState.domain]);
+  renderCurrentSite(activeTabState, currentExposure);
+
+  // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
+  renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
 
   // Render Overall Overview Metrics & Privacy Score
   renderExposureOverview(activeExposures);
 
   // Render Recent Website Activity List (rolling 5 most recently visited unique domains)
   renderRecentVisits(visits);
+}
+
+/**
+ * Renders Child Safe Mode Alert (§9) if active user is flagged as a child / child safe mode is active
+ */
+function renderChildSafeAlert(isChildSafe, hasBehavioralTracking) {
+  const alertContainer = document.getElementById('child-safe-alert-container');
+  if (!alertContainer) return;
+
+  if (isChildSafe && hasBehavioralTracking) {
+    alertContainer.innerHTML = `
+      <div class="alert-chip-child" id="child-safe-warning-alert">
+        ⚠️ WARNING: Children's Behavioral Tracking Detected (§9)
+      </div>
+    `;
+  } else {
+    alertContainer.innerHTML = '';
+  }
 }
 
 /**

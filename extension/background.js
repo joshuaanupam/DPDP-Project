@@ -221,6 +221,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (data.reclaimEnabled === undefined) {
     await chrome.storage.local.set({
       reclaimEnabled: true,
+      childSafeMode: false,
       demoMode: false,
       exposures: {},            // Clean exposures DB for real user
       recentWebsiteVisits: [],  // Clean recent visits queue for real user
@@ -277,14 +278,74 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleUpdateCleanupStatus(message.domain, message.status);
   } else if (message.type === 'TOGGLE_DEMO_MODE') {
     handleToggleDemoMode(message.enableDemo);
+  } else if (message.type === 'TOGGLE_CHILD_SAFE_MODE') {
+    handleToggleChildSafeMode(message.enableChildSafeMode);
   } else if (message.type === 'CLEAR_ALL_DATA') {
     handleClearAllData();
   } else if (message.type === 'GET_CLEANUP_INFO') {
     const info = getCleanupMethod(message.domain);
     sendResponse(info);
     return true;
+  } else if (message.type === 'GET_SITE_DATA') {
+    // Content script requests privacy data for the current domain
+    handleGetSiteData(message.domain).then(sendResponse).catch(() => sendResponse(null));
+    return true; // async sendResponse
   }
 });
+
+/**
+ * Toggles Child Safe Mode (§9 Protection)
+ */
+async function handleToggleChildSafeMode(enableChildSafeMode) {
+  await chrome.storage.local.set({ childSafeMode: !!enableChildSafeMode });
+  chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+  broadcastToContentScripts();
+}
+
+/**
+ * Returns exposure data for a specific domain to the content script overlay
+ */
+async function handleGetSiteData(domain) {
+  const normalized = normalizeDomain(domain);
+  const storage = await chrome.storage.local.get(['exposures', 'demoMode', 'reclaimEnabled', 'childSafeMode']);
+  const allExposures = storage.exposures || {};
+  const isDemo = storage.demoMode || false;
+  const enabled = storage.reclaimEnabled !== false;
+  const childSafeMode = storage.childSafeMode || false;
+
+  // Filter exposures based on demo mode
+  const activeExposures = {};
+  Object.keys(allExposures).forEach(key => {
+    const record = allExposures[key];
+    if (isDemo || !record.isDemo) {
+      activeExposures[key] = record;
+    }
+  });
+
+  return {
+    siteExposure: activeExposures[normalized] || null,
+    exposures: activeExposures,
+    demoMode: isDemo,
+    enabled: enabled,
+    childSafeMode: childSafeMode
+  };
+}
+
+/**
+ * Broadcasts a data update to all content scripts so overlays refresh live
+ */
+async function broadcastToContentScripts() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id && tab.url && !isInternalUrl(tab.url)) {
+        chrome.tabs.sendMessage(tab.id, { type: 'OVERLAY_DATA_UPDATE' }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    // Ignore errors when tabs are not accessible
+  }
+}
 
 /**
  * Processes Real Website Navigation Visit
@@ -324,6 +385,7 @@ async function processWebsiteVisit(data) {
 
   await chrome.storage.local.set({ recentWebsiteVisits: visits });
   chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+  broadcastToContentScripts();
 }
 
 /**
@@ -349,6 +411,7 @@ async function handleUpdateCleanupStatus(domain, status) {
 
       await chrome.storage.local.set({ exposures, timeline });
       chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+      broadcastToContentScripts();
     }
   } catch (err) {
     console.error('Error updating cleanup status:', err);
@@ -387,6 +450,7 @@ async function handleToggleDemoMode(enableDemo) {
   }
 
   chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+  broadcastToContentScripts();
 }
 
 /**
@@ -400,6 +464,7 @@ async function handleClearAllData() {
     demoMode: false
   });
   chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+  broadcastToContentScripts();
 }
 
 /**
