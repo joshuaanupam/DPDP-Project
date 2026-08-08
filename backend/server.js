@@ -7,6 +7,7 @@ const dashboardController = require('./controllers/dashboardController');
 const requestController = require('./controllers/requestController');
 const auditController = require('./controllers/auditController');
 const websiteController = require('./controllers/websiteController');
+const aiController = require('./controllers/aiController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -35,7 +36,7 @@ app.get('/api/dashboard/:userId', dashboardController.getDashboardData);
 // 3-Tier Privacy Requests
 app.post('/api/requests/create', requestController.createPrivacyRequest);
 app.get('/api/requests/:userId', requestController.getUserRequests);
-app.post('/api/requests/:requestId/status', requestController.updateRequestStatus);
+  app.post('/api/requests/:requestId/status', requestController.updateRequestStatus);
 
 // Audit Trail Logs
 app.get('/api/audit/:userId', auditController.getAuditLogs);
@@ -73,6 +74,9 @@ app.post('/api/demo/reset', async (req, res, next) => {
     await prisma.$disconnect();
   }
 });
+
+// AI Policy Summarizer
+app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
