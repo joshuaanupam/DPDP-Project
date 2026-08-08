@@ -43,6 +43,48 @@ function normalizeDomain(urlOrHostname) {
 
 // ─── Verified Database of Standard Tracked Websites ─────────────────────────
 const VERIFIED_WEBSITE_DATABASE = {
+  'store.epicgames.com': {
+    siteName: 'Epic Games Store',
+    domain: 'store.epicgames.com',
+    bullets: {
+      EN: [
+        'Epic Games Store is a digital storefront for purchasing and downloading PC games',
+        'Users can browse games, purchase titles, manage their library, and access game-related content',
+        'The platform provides digital game distribution and related account services'
+      ],
+      HI: [
+        'Epic Games Store डिजिटल गेम खरीदने और डाउनलोड करने का प्लेटफ़ॉर्म है',
+        'उपयोगकर्ता गेम ब्राउज़, खरीद और अपनी गेम लाइब्रेरी प्रबंधित कर सकते हैं',
+        'यह प्लेटफ़ॉर्म डिजिटल गेम वितरण और संबंधित अकाउंट सेवाएँ प्रदान करता है'
+      ],
+      TE: [
+        'Epic Games Store డిజిటల్ గేమ్లను కొనుగోలు చేసి డౌన్లోడ్ చేసుకునే ప్లాట్ఫారమ్',
+        'వినియోగదారులు గేమ్లను బ్రౌజ్ చేయడం, కొనుగోలు చేయడం మరియు తమ గేమ్ లైబ్రరీని నిర్వహించడం చేయవచ్చు',
+        'ఈ ప్లాట్ఫారమ్ డిజిటల్ గేమ్ పంపిణీ మరియు సంబంధిత ఖాతా సేవలను అందిస్తుంది'
+      ]
+    }
+  },
+  'epicgames.com': {
+    siteName: 'Epic Games Store',
+    domain: 'epicgames.com',
+    bullets: {
+      EN: [
+        'Epic Games Store is a digital storefront for purchasing and downloading PC games',
+        'Users can browse games, purchase titles, manage their library, and access game-related content',
+        'The platform provides digital game distribution and related account services'
+      ],
+      HI: [
+        'Epic Games Store डिजिटल गेम खरीदने और डाउनलोड करने का प्लेटफ़ॉर्म है',
+        'उपयोगकर्ता गेम ब्राउज़, खरीद और अपनी गेम लाइब्रेरी प्रबंधित कर सकते हैं',
+        'यह प्लेटफ़ॉर्म डिजिटल गेम वितरण और संबंधित अकाउंट सेवाएँ प्रदान करता है'
+      ],
+      TE: [
+        'Epic Games Store డిజిటల్ గేమ్లను కొనుగోలు చేసి డౌన్లోడ్ చేసుకునే ప్లాట్ఫారమ్',
+        'వినియోగదారులు గేమ్లను బ్రౌజ్ చేయడం, కొనుగోలు చేయడం మరియు తమ గేమ్ లైబ్రరీని నిర్వహించడం చేయవచ్చు',
+        'ఈ ప్లాట్ఫారమ్ డిజిటల్ గేమ్ పంపిణీ మరియు సంబంధిత ఖాతా సేవలను అందిస్తుంది'
+      ]
+    }
+  },
   'youtube.com': {
     siteName: 'YouTube',
     domain: 'youtube.com',

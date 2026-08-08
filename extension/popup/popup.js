@@ -435,7 +435,6 @@ function renderRecentVisits(visits) {
 }
 
 let currentActiveDomain = '';
-let currentSelectedLanguage = 'EN';
 
 /**
  * Normalizes host domain or full URL to primary domain identifier (e.g. https://www.youtube.com/watch?v=123 -> youtube.com)
@@ -458,40 +457,10 @@ function normalizeDomain(hostnameOrUrl) {
 }
 
 /**
- * Setup language selector buttons in WEBSITE SUMMARY card
- */
-function setupLanguageSelector(activeTabState, activeTabId) {
-  const langSelector = document.getElementById('brief-lang-selector');
-  if (!langSelector) return;
-
-  const btns = langSelector.querySelectorAll('.brief-lang-btn');
-  btns.forEach(btn => {
-    btn.onclick = async (e) => {
-      e.preventDefault();
-      const lang = btn.getAttribute('data-lang');
-      currentSelectedLanguage = lang;
-      btns.forEach(b => {
-        if (b.getAttribute('data-lang') === lang) {
-          b.style.background = '#2563eb';
-          b.style.color = 'white';
-          b.classList.add('active');
-        } else {
-          b.style.background = 'transparent';
-          b.style.color = '#64748b';
-          b.classList.remove('active');
-        }
-      });
-      if (activeTabState && activeTabState.domain) {
-        await loadWebsiteBrief(activeTabState, activeTabId, false);
-      }
-    };
-  });
-}
-
-/**
  * Loads, caches, and renders the AI-powered Website Summary.
  * Uses strict domain keying: privacylens_summary_<normalized_domain>
  * Shared between Extension, Website Details, and Reclaim panel.
+ * English Only for Chrome Extension & RECLAIM popup.
  */
 async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = false) {
   const card = document.getElementById('website-brief-card');
@@ -510,9 +479,6 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
   const normDomain = normalizeDomain(activeTabState.domain);
   currentActiveDomain = normDomain;
   card.style.display = 'block';
-
-  // Setup language selector event handlers
-  setupLanguageSelector(activeTabState, activeTabId);
 
   // 2. Strict Domain-Keyed Cache Check: privacylens_summary_<domain>
   const cacheKey = `privacylens_summary_${normDomain}`;

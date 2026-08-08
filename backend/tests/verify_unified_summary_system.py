@@ -94,9 +94,17 @@ def test_unified_system():
     print("SUCCESS: Unknown website strictly returned unavailable message without guessing!")
 
     # ----------------------------------------------------
-    # TEST 5: Tracked E-Commerce vs Gaming
+    # TEST 5: Tracked E-Commerce vs Gaming (Epic Games Store)
     # ----------------------------------------------------
-    print("\n[TEST 5] Testing ShopEase (E-Commerce)...")
+    print("\n[TEST 5] Testing Epic Games Store (Gaming Storefront)...")
+    epic_res = post_summary("store.epicgames.com", "EN", "Epic Games Store")
+    assert epic_res["websiteId"] == "store.epicgames.com"
+    assert "epic games store" in epic_res["bullets"][0].lower()
+    print("SUCCESS: Epic Games Store Gaming Summary Verified:")
+    for b in epic_res["bullets"]:
+        print(f"   {b}")
+
+    print("\n[TEST 6] Testing ShopEase (E-Commerce)...")
     shop_res = post_summary("shopease.com", "EN", "ShopEase")
     assert shop_res["websiteId"] == "shopease.com"
     assert "shopease" in shop_res["bullets"][0].lower() or "e-commerce" in shop_res["bullets"][0].lower()
