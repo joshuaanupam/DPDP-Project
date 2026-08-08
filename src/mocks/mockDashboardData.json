@@ -1,0 +1,269 @@
+{
+  "user": {
+    "id": "usr_joshua123",
+    "name": "Joshua",
+    "email": "joshua@example.com",
+    "privacyScore": 72
+  },
+  "stats": {
+    "totalWebsites": 6,
+    "activeConsents": 13,
+    "pendingRequests": 2,
+    "privacyScore": 72
+  },
+  "websites": [
+    {
+      "id": "web_shopease",
+      "domain": "shopease.com",
+      "name": "ShopEase",
+      "category": "E-Commerce",
+      "riskLevel": "Medium",
+      "favicon": "🛍️",
+      "deletionTier": 1,
+      "directApiUrl": "http://localhost:3000/api/partner/revoke",
+      "dataItems": ["Email", "Phone", "Name", "Shipping Address"],
+      "consents": [
+        {
+          "id": "c1",
+          "consentType": "Account Creation",
+          "status": "ACTIVE",
+          "grantedAt": "2026-08-08T11:30:00Z"
+        },
+        {
+          "id": "c2",
+          "consentType": "Marketing Emails",
+          "status": "ACTIVE",
+          "grantedAt": "2026-08-08T11:30:00Z"
+        },
+        {
+          "id": "c3",
+          "consentType": "3rd-Party Ad Sharing",
+          "status": "ACTIVE",
+          "grantedAt": "2026-08-08T11:30:00Z"
+        }
+      ],
+      "aiSummary": "ShopEase collects name, contact details, and purchase records. They share browsing behavior with 3rd-party ad networks. Marketing and advertising consents can be directly revoked via Tier 1 API."
+    },
+    {
+      "id": "web_dataflow",
+      "domain": "dataflow.io",
+      "name": "DataFlow Analytics",
+      "category": "Analytics & AdTech",
+      "riskLevel": "High",
+      "favicon": "📊",
+      "deletionTier": 3,
+      "dataItems": ["Email", "IP Address", "Location", "Device Telemetry"],
+      "consents": [
+        {
+          "id": "c4",
+          "consentType": "Account Creation",
+          "status": "ACTIVE",
+          "grantedAt": "2026-07-12T09:14:00Z"
+        },
+        {
+          "id": "c5",
+          "consentType": "Data Broker Sharing",
+          "status": "ACTIVE",
+          "grantedAt": "2026-07-12T09:14:00Z"
+        },
+        {
+          "id": "c6",
+          "consentType": "Cross-Site Behavioral Tracking",
+          "status": "ACTIVE",
+          "grantedAt": "2026-07-12T09:14:00Z"
+        }
+      ],
+      "aiSummary": "DataFlow Analytics aggregates user telemetry and location profiles across web networks. Retains data for 3 years and shares with ad exchanges. Requires a formal DPDP §12 legal erasure notice."
+    },
+    {
+      "id": "web_socialpulse",
+      "domain": "socialpulse.app",
+      "name": "SocialPulse",
+      "category": "Social Media",
+      "riskLevel": "Medium",
+      "favicon": "💬",
+      "deletionTier": 2,
+      "guidedUrl": "https://socialpulse.app/settings/privacy/delete",
+      "dataItems": ["Email", "Phone", "Name", "Profile Photo", "Contacts Sync"],
+      "consents": [
+        {
+          "id": "c7",
+          "consentType": "Account Creation",
+          "status": "ACTIVE",
+          "grantedAt": "2026-05-20T14:22:00Z"
+        },
+        {
+          "id": "c8",
+          "consentType": "Personalized Algorithmic Processing",
+          "status": "ACTIVE",
+          "grantedAt": "2026-05-20T14:22:00Z"
+        }
+      ],
+      "aiSummary": "SocialPulse processes personal interactions to build content recommendations. Provides a self-serve guided deletion portal for account and data removal."
+    },
+    {
+      "id": "web_streamhub",
+      "domain": "streamhub.tv",
+      "name": "StreamHub TV",
+      "category": "Entertainment",
+      "riskLevel": "Low",
+      "favicon": "🎬",
+      "deletionTier": 1,
+      "directApiUrl": "http://localhost:3000/api/partner/revoke",
+      "dataItems": ["Email", "Billing Info", "Watch History"],
+      "consents": [
+        {
+          "id": "c9",
+          "consentType": "Account Creation",
+          "status": "ACTIVE",
+          "grantedAt": "2026-03-10T18:00:00Z"
+        },
+        {
+          "id": "c10",
+          "consentType": "Newsletter Notifications",
+          "status": "REVOKED",
+          "grantedAt": "2026-03-10T18:00:00Z",
+          "revokedAt": "2026-08-01T10:00:00Z"
+        }
+      ],
+      "aiSummary": "StreamHub retains watch history and billing info to maintain active subscription services. Does not share data with 3rd party brokers."
+    },
+    {
+      "id": "web_cloudspace",
+      "domain": "cloudspace.net",
+      "name": "CloudSpace Storage",
+      "category": "Cloud Services",
+      "riskLevel": "Low",
+      "favicon": "☁️",
+      "deletionTier": 2,
+      "guidedUrl": "https://cloudspace.net/account/privacy",
+      "dataItems": ["Email", "IP Address", "File Metadata"],
+      "consents": [
+        {
+          "id": "c11",
+          "consentType": "Account Creation",
+          "status": "ACTIVE",
+          "grantedAt": "2026-01-15T08:30:00Z"
+        },
+        {
+          "id": "c12",
+          "consentType": "Diagnostic Telemetry",
+          "status": "ACTIVE",
+          "grantedAt": "2026-01-15T08:30:00Z"
+        }
+      ],
+      "aiSummary": "CloudSpace stores encrypted files and user logs. Guided self-serve privacy controls enable downloading archives or requesting account closure."
+    },
+    {
+      "id": "web_fintechx",
+      "domain": "fintechx.com",
+      "name": "FinTechX Pay",
+      "category": "Finance",
+      "riskLevel": "High",
+      "favicon": "💳",
+      "deletionTier": 3,
+      "dataItems": ["Email", "Phone", "Government ID / PAN", "Bank Details", "Residential Address"],
+      "consents": [
+        {
+          "id": "c13",
+          "consentType": "Account Creation",
+          "status": "ACTIVE",
+          "grantedAt": "2025-11-04T12:00:00Z"
+        },
+        {
+          "id": "c14",
+          "consentType": "Credit Scoring & Marketing",
+          "status": "ACTIVE",
+          "grantedAt": "2025-11-04T12:00:00Z"
+        }
+      ],
+      "aiSummary": "FinTechX processes financial identity records under KYC regulations. Marketing opt-outs and data erasure require formal DPDP legal notices."
+    }
+  ],
+  "requests": [
+    {
+      "id": "req_101",
+      "siteId": "web_streamhub",
+      "siteName": "StreamHub TV",
+      "domain": "streamhub.tv",
+      "requestType": "CONSENT_REVOCATION",
+      "targetConsent": "Newsletter Notifications",
+      "tier": 1,
+      "methodUsed": "TIER1_DIRECT_API",
+      "status": "COMPLETED",
+      "createdAt": "2026-08-01T10:00:00Z",
+      "updatedAt": "2026-08-01T10:00:05Z",
+      "referenceId": "PL-REV-883921"
+    },
+    {
+      "id": "req_102",
+      "siteId": "web_fintechx",
+      "siteName": "FinTechX Pay",
+      "domain": "fintechx.com",
+      "requestType": "CONSENT_REVOCATION",
+      "targetConsent": "Credit Scoring & Marketing",
+      "tier": 3,
+      "methodUsed": "TIER3_GENERATED_NOTICE",
+      "status": "SUBMITTED",
+      "createdAt": "2026-08-08T11:00:00Z",
+      "updatedAt": "2026-08-08T11:00:00Z",
+      "referenceId": "DPDP-NOTICE-2026-092"
+    },
+    {
+      "id": "req_103",
+      "siteId": "web_dataflow",
+      "siteName": "DataFlow Analytics",
+      "domain": "dataflow.io",
+      "requestType": "DATA_ERASURE",
+      "targetConsent": "Data Broker Sharing",
+      "tier": 3,
+      "methodUsed": "TIER3_GENERATED_NOTICE",
+      "status": "AWAITING_RESPONSE",
+      "createdAt": "2026-08-07T14:30:00Z",
+      "updatedAt": "2026-08-07T14:30:00Z",
+      "referenceId": "DPDP-ERASE-2026-041"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "aud_501",
+      "timestamp": "2026-08-08T11:30:05Z",
+      "siteName": "ShopEase",
+      "action": "EVENT_DETECTED",
+      "description": "Passive MV3 Extension detected account creation form with Email, Phone, Name, and 2 consent checkboxes.",
+      "dpdpProof": "DPDP §6(1) Consent Logging"
+    },
+    {
+      "id": "aud_502",
+      "timestamp": "2026-08-08T11:00:00Z",
+      "siteName": "FinTechX Pay",
+      "action": "DELETION_REQUESTED",
+      "description": "Generated DPDP §6 Consent Withdrawal notice for Credit Scoring & Marketing.",
+      "dpdpProof": "DPDP §6(4) Withdrawal Notice Sent"
+    },
+    {
+      "id": "aud_503",
+      "timestamp": "2026-08-07T14:30:00Z",
+      "siteName": "DataFlow Analytics",
+      "action": "DELETION_REQUESTED",
+      "description": "Generated DPDP §12 Erasure of Data request letter sent to privacy@dataflow.io.",
+      "dpdpProof": "DPDP §12 Erasure Claim"
+    },
+    {
+      "id": "aud_504",
+      "timestamp": "2026-08-01T10:00:05Z",
+      "siteName": "StreamHub TV",
+      "action": "CONSENT_REVOCATION",
+      "description": "Successfully revoked Newsletter Notifications consent via Tier 1 Direct Partner API.",
+      "dpdpProof": "DPDP §6(4) Immediate Revocation Executed"
+    },
+    {
+      "id": "aud_505",
+      "timestamp": "2026-07-12T09:14:00Z",
+      "siteName": "DataFlow Analytics",
+      "action": "EVENT_DETECTED",
+      "description": "Captured tracking consent registration across device telemetry.",
+      "dpdpProof": "DPDP Initial Consent Capture"
+    }
+  ]
+}

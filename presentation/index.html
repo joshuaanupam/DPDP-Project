@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrivacyLens — Preliminary Project Presentation Deck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="slides.css">
+</head>
+<body>
+
+  <!-- TOP DECK CONTROL BAR -->
+  <header class="deck-header">
+    <div class="brand">
+      <div class="shield-logo">🛡️</div>
+      <div class="brand-text">
+        <span class="brand-name">PrivacyLens</span>
+        <span class="brand-tag">DPDP Act 2023 Compliance Platform</span>
+      </div>
+    </div>
+    
+    <div class="deck-controls">
+      <span class="slide-indicator" id="slideIndicator">Slide 1 of 12</span>
+      <button class="ctrl-btn" id="btnPrev" title="Previous Slide (Left Arrow)">◄ Prev</button>
+      <button class="ctrl-btn" id="btnNext" title="Next Slide (Right Arrow)">Next ►</button>
+      <button class="ctrl-btn" id="btnOverview" title="Grid View (O)">Grid</button>
+      <button class="ctrl-btn" id="btnFullscreen" title="Toggle Fullscreen (F)">Fullscreen ⛶</button>
+    </div>
+  </header>
+
+  <!-- PROGRESS BAR -->
+  <div class="progress-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- SLIDES CONTAINER -->
+  <main class="deck-container" id="deckContainer">
+
+    <!-- SLIDE 1 -->
+    <section class="slide active" data-slide="1">
+      <div class="hero-card">
+        <div class="badge badge-cyan">PRELIMINARY PROJECT PRESENTATION • AUGUST 2026</div>
+        <h1 class="hero-title">PRIVACYLENS</h1>
+        <p class="hero-subtitle">Transparent Digital Footprint & Compliance Control Center for DPDP Act 2023</p>
+        
+        <p class="hero-desc">
+          A passive browser extension (Manifest V3) & centralized privacy control platform that empowers individuals to discover where personal data resides, understand agreements via AI policy summaries, execute 3-tier deletions, and maintain legal proof of consent decisions.
+        </p>
+
+        <div class="hero-meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Project Status</span>
+            <span class="meta-val val-green">● PRODUCTION READY (GREEN)</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Target Build Sprint</span>
+            <span class="meta-val">20 Hours Complete</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Primary Law</span>
+            <span class="meta-val">Digital Personal Data Protection Act 2023</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Core Tech</span>
+            <span class="meta-val">Chrome MV3 + React + Node.js + Prisma</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2 -->
+    <section class="slide" data-slide="2">
+      <div class="slide-header">
+        <span class="slide-tag">01 / CORE MOTIVATION</span>
+        <h2 class="slide-title">The Digital Footprint Crisis & DPDP Context</h2>
+      </div>
+
+      <div class="grid-2x2">
+        <div class="card card-rose">
+          <div class="card-icon">🚨</div>
+          <h3>1. Data Sprawl Across 50+ Web Services</h3>
+          <p>Users register on dozens of e-commerce, media, and forum sites over time, leaving sensitive identifiers (Name, Email, Phone) scattered across legacy databases without tracking.</p>
+        </div>
+
+        <div class="card card-amber">
+          <div class="card-icon">👁️‍🗨️</div>
+          <h3>2. Invisible & Opaque Consents</h3>
+          <p>Pre-checked boxes and 40-page legal terms trick users into granting broad consent for marketing, tracking, and 3rd-party data sharing with zero visibility.</p>
+        </div>
+
+        <div class="card card-cyan">
+          <div class="card-icon">⚖️</div>
+          <h3>3. Unenforceable Deletion Rights</h3>
+          <p>The DPDP Act 2023 guarantees §6 Revocation and §12 Erasure, but users lack simple, consolidated tools to enforce these rights across fragmented web platforms.</p>
+        </div>
+
+        <div class="card card-indigo">
+          <div class="card-icon">📜</div>
+          <h3>4. Absence of Audit-Ready Evidence</h3>
+          <p>When users request account deletion via email or web forms, organizations rarely provide verifiable logs, leaving individuals without proof of legal compliance.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3 -->
+    <section class="slide" data-slide="3">
+      <div class="slide-header">
+        <span class="slide-tag">02 / EXECUTIVE SUMMARY</span>
+        <h2 class="slide-title">Product Vision & Unique Value Proposition (UVP)</h2>
+      </div>
+
+      <div class="split-2">
+        <div class="card">
+          <h3 class="card-header-cyan">System Boundary & Scope</h3>
+          <div class="scope-list">
+            <div class="scope-header text-green">WHAT PRIVACYLENS IS</div>
+            <ul>
+              <li>Centralized Privacy Control Layer for personal footprint</li>
+              <li>Passive event detector via Chrome Extension (MV3)</li>
+              <li>Realistic 3-Tier Deletion & Revocation Engine</li>
+              <li>Audit & evidence engine for DPDP compliance proof</li>
+            </ul>
+            
+            <div class="scope-header text-rose" style="margin-top: 20px;">WHAT PRIVACYLENS IS NOT</div>
+            <ul>
+              <li class="muted">NOT a document vault or DigiLocker replacement</li>
+              <li class="muted">NOT for storing Aadhaar, PAN, or identity cards</li>
+              <li class="muted">NOT a password manager or form-filler</li>
+              <li class="muted">NOT claiming false 1-click universal auto-deletion</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-header-indigo">Four Pillars of Unique Value</h3>
+          <div class="uvp-list">
+            <div class="uvp-item">
+              <span class="uvp-num">01</span>
+              <div>
+                <strong>Zero-Effort Automatic Discovery</strong>
+                <p>Passive background extension logs form submit metadata live as users navigate the web.</p>
+              </div>
+            </div>
+            <div class="uvp-item">
+              <span class="uvp-num">02</span>
+              <div>
+                <strong>Plain-Language AI Summarization</strong>
+                <p>Converts multi-page terms of service into 2-sentence actionable summaries via Gemini AI.</p>
+              </div>
+            </div>
+            <div class="uvp-item">
+              <span class="uvp-num">03</span>
+              <div>
+                <strong>Honest 3-Tier Action Engine</strong>
+                <p>Combines Direct API calls, Guided URLs, and Formatted Legal Request drafting for real-world reliability.</p>
+              </div>
+            </div>
+            <div class="uvp-item">
+              <span class="uvp-num">04</span>
+              <div>
+                <strong>Audit-Ready DPDP Proof</strong>
+                <p>Generates immutable chronological logs with timestamps proving consent revocation and erasure submission.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4 -->
+    <section class="slide" data-slide="4">
+      <div class="slide-header">
+        <span class="slide-tag">03 / PRODUCT ARCHITECTURE</span>
+        <h2 class="slide-title">The Five Core Product Pillars</h2>
+      </div>
+
+      <div class="pillars-container">
+        <div class="pillar-card border-cyan">
+          <div class="pillar-head bg-cyan">1. DISCOVER</div>
+          <h4>Passive Chrome MV3 Interceptor</h4>
+          <p>Detects form submits & consent checkboxes without manual data entry.</p>
+        </div>
+
+        <div class="pillar-card border-indigo">
+          <div class="pillar-head bg-indigo">2. UNDERSTAND</div>
+          <h4>AI Policy & Risk Intelligence</h4>
+          <p>Summarizes legal terms via Gemini API & calculates Privacy Score (0-100).</p>
+        </div>
+
+        <div class="pillar-card border-amber">
+          <div class="pillar-head bg-amber">3. CONTROL</div>
+          <h4>3-Tier Action Engine</h4>
+          <p>Executes Direct API, Guided Drawer, or Legal Notice generation.</p>
+        </div>
+
+        <div class="pillar-card border-rose">
+          <div class="pillar-head bg-rose">4. CLEAN UP</div>
+          <h4>Inactive Account Radar</h4>
+          <p>Flags stale accounts & high-risk domains for proactive data scrubbing.</p>
+        </div>
+
+        <div class="pillar-card border-green">
+          <div class="pillar-head bg-green">5. PROVE</div>
+          <h4>Immutable Audit Engine</h4>
+          <p>Maintains chronological audit trail of all consent revocations & requests.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5 -->
+    <section class="slide" data-slide="5">
+      <div class="slide-header">
+        <span class="slide-tag">04 / TECHNICAL BREAKTHROUGH</span>
+        <h2 class="slide-title">The Honest 3-Tier Deletion & Revocation Model</h2>
+      </div>
+
+      <div class="split-3">
+        <div class="card card-green">
+          <div class="tier-badge bg-green">LEVEL 1 — DIRECT API</div>
+          <h3>Partner Endpoint Integration</h3>
+          <ul>
+            <li>Used when target website exposes an official privacy API.</li>
+            <li>Platform calls <code>POST /api/partner/revoke</code> or <code>/delete</code>.</li>
+            <li>Status updates instantaneously to <strong>REVOKED / COMPLETED</strong>.</li>
+            <li>Fully validated in demo via ShopEase backend integration.</li>
+          </ul>
+        </div>
+
+        <div class="card card-amber">
+          <div class="tier-badge bg-amber">LEVEL 2 — GUIDED URL</div>
+          <h3>Authenticated Redirection Drawer</h3>
+          <ul>
+            <li>Used when site requires manual login & account navigation.</li>
+            <li>Platform opens a guided side-drawer with direct deep link.</li>
+            <li>Provides step-by-step UI directions for deletion.</li>
+            <li>Eliminates searching through complex settings menus.</li>
+          </ul>
+        </div>
+
+        <div class="card card-cyan">
+          <div class="tier-badge bg-cyan">LEVEL 3 — LEGAL NOTICE</div>
+          <h3>DPDP §6 / §12 Generator</h3>
+          <ul>
+            <li>Used when target website lacks public deletion APIs.</li>
+            <li>Generates structured legal demand citing DPDP Act 2023.</li>
+            <li>Triggers pre-filled <code>mailto:</code> or copyable legal transcript.</li>
+            <li>Registers request in Request Tracker for SLA tracking.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6 -->
+    <section class="slide" data-slide="6">
+      <div class="slide-header">
+        <span class="slide-tag">05 / SYSTEM ARCHITECTURE</span>
+        <h2 class="slide-title">End-to-End System Integration Flow</h2>
+      </div>
+
+      <div class="architecture-flow">
+        <div class="arch-box border-cyan">
+          <div class="arch-header bg-cyan">BROWSER EXTENSION (MV3)</div>
+          <ul>
+            <li>Content Script DOM Listener</li>
+            <li>Background Service Worker</li>
+            <li>Zero Password Security Mask</li>
+            <li>Extension Popup View</li>
+          </ul>
+        </div>
+
+        <div class="arch-arrow">➔</div>
+
+        <div class="arch-box border-indigo">
+          <div class="arch-header bg-indigo">NODE.JS / EXPRESS BACKEND</div>
+          <ul>
+            <li>Auth & Security Middleware</li>
+            <li>Event Ingestion Controller</li>
+            <li>3-Tier Action Engine</li>
+            <li>Gemini AI Policy Parser</li>
+          </ul>
+        </div>
+
+        <div class="arch-arrow">➔</div>
+
+        <div class="arch-box border-amber">
+          <div class="arch-header bg-amber">PRISMA & SQLITE DATABASE</div>
+          <ul>
+            <li>User Footprint Table</li>
+            <li>Active Consents Table</li>
+            <li>Privacy Requests Table</li>
+            <li>Immutable Audit Log</li>
+          </ul>
+        </div>
+
+        <div class="arch-arrow">➔</div>
+
+        <div class="arch-box border-green">
+          <div class="arch-header bg-green">REACT CONTROL DASHBOARD</div>
+          <ul>
+            <li>Digital Footprint Grid</li>
+            <li>Dynamic Privacy Score (0-100)</li>
+            <li>3-Tier Execution Drawers</li>
+            <li>Audit Log Timeline</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7 -->
+    <section class="slide" data-slide="7">
+      <div class="slide-header">
+        <span class="slide-tag">06 / EXTENSION ENGINEERING</span>
+        <h2 class="slide-title">Browser Extension Architecture & Security Mandate</h2>
+      </div>
+
+      <div class="split-2">
+        <div class="card">
+          <h3 class="text-cyan">Extension Execution Pipeline</h3>
+          <div class="step-timeline">
+            <div class="timeline-step">
+              <span class="step-num bg-cyan">1</span>
+              <div>
+                <strong>Passive DOM Interception (content.js)</strong>
+                <p>Attaches non-blocking listeners to HTML form submit events across all visited web domains.</p>
+              </div>
+            </div>
+            <div class="timeline-step">
+              <span class="step-num bg-cyan">2</span>
+              <div>
+                <strong>Form & Consent Inspection</strong>
+                <p>Identifies input fields (Email, Phone, Name) and checkboxes containing terms/marketing keywords.</p>
+              </div>
+            </div>
+            <div class="timeline-step">
+              <span class="step-num bg-cyan">3</span>
+              <div>
+                <strong>Payload Dispatch (background.js)</strong>
+                <p>Sends sanitized metadata payload via async HTTP POST /api/events to central backend.</p>
+              </div>
+            </div>
+            <div class="timeline-step">
+              <span class="step-num bg-cyan">4</span>
+              <div>
+                <strong>Extension Popup View (popup.jsx)</strong>
+                <p>Displays instant domain privacy status, detected fields, and active consents to the user.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-rose">
+          <h3 class="text-rose">🛡️ Zero Credential Retention Mandate</h3>
+          <div class="sec-box">
+            <div class="sec-sub text-amber">STRICT EXCLUSION RULES</div>
+            <ul>
+              <li><strong>Passswords Completely Ignored:</strong> <code>input[type="password"]</code> strictly excluded.</li>
+              <li><strong>Payment Cards Ignored:</strong> Credit card, CVV, and banking fields stripped out.</li>
+              <li><strong>OTP & Auth Tokens Ignored:</strong> Security verification codes never processed.</li>
+            </ul>
+
+            <div class="sec-sub text-cyan" style="margin-top: 15px;">PRIVACY BY DESIGN</div>
+            <ul>
+              <li><strong>Category Level Metadata:</strong> Logs data types ("Email Present") rather than raw text strings.</li>
+              <li><strong>Environment Isolation:</strong> API keys isolated exclusively in backend <code>.env</code>.</li>
+              <li><strong>Transparent Execution:</strong> Open content script execution visible in DevTools.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8 -->
+    <section class="slide" data-slide="8">
+      <div class="slide-header">
+        <span class="slide-tag">07 / PRIVACY INTELLIGENCE</span>
+        <h2 class="slide-title">AI Policy Summarizer & Privacy Score Algorithm</h2>
+      </div>
+
+      <div class="split-2">
+        <div class="card">
+          <h3 class="text-indigo">🤖 Gemini API Policy Summarizer</h3>
+          <div class="ai-box">
+            <div class="ai-item">
+              <strong>Problem Solved</strong>
+              <p>Privacy policies average 4,000 words of legal jargon that no consumer reads.</p>
+            </div>
+            <div class="ai-item">
+              <strong>Gemini AI Prompt Engineering</strong>
+              <p>Extracts key data practices into 2 plain-English sentences: (1) What data is collected, (2) How data is shared or sold.</p>
+            </div>
+            <div class="ai-item">
+              <strong>Rule-Based Graceful Fallback</strong>
+              <p>If Gemini API key is missing or offline, system switches to structured keyword extraction without breaking UI.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="text-green">📊 Dynamic Privacy Score Equation</h3>
+          <div class="formula-box">
+            <code>Score = 100 - (ActiveMarketing × 5) - (HighRiskSites × 10) + (RevokedConsents × 3)</code>
+          </div>
+
+          <div class="score-rules">
+            <div class="rule-item">
+              <span>Base Score: 100</span>
+              <p>Starting score for clean digital footprint.</p>
+            </div>
+            <div class="rule-item">
+              <span>Marketing Deductions (-5 pts)</span>
+              <p>Subtracted for each active promotional / 3rd party consent.</p>
+            </div>
+            <div class="rule-item">
+              <span>High Risk Site Penalty (-10 pts)</span>
+              <p>Deducted for accounts on unverified or data-broker domains.</p>
+            </div>
+            <div class="rule-item">
+              <span>Revocation Bonus (+3 pts)</span>
+              <p>Rewarded immediately when user revokes consent or submits erasure.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9 -->
+    <section class="slide" data-slide="9">
+      <div class="slide-header">
+        <span class="slide-tag">08 / USER INTERFACE & PROOF</span>
+        <h2 class="slide-title">Central Privacy Dashboard & Audit Evidence Engine</h2>
+      </div>
+
+      <div class="grid-2x2">
+        <div class="card card-cyan">
+          <h3>Digital Footprint Grid</h3>
+          <p>Card-based interface summarizing all connected websites, active data categories (Email, Phone, Name), risk tags, and deletion tiers.</p>
+        </div>
+
+        <div class="card card-indigo">
+          <h3>Website Detail Modal</h3>
+          <p>Granular breakdown of specific domain agreements, displaying plain-English AI summaries and 3-tier execution triggers.</p>
+        </div>
+
+        <div class="card card-amber">
+          <h3>Privacy Request Tracker</h3>
+          <p>Monitors lifecycle of deletion requests (CREATED ➔ SUBMITTED ➔ AWAITING RESPONSE ➔ COMPLETED) with legal deadline indicators.</p>
+        </div>
+
+        <div class="card card-green">
+          <h3>Immutable Audit Log Timeline</h3>
+          <p>Chronological evidence timeline recording exact ISO timestamps for event discovery, consent revocations, and DPDP request submissions.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10 -->
+    <section class="slide" data-slide="10">
+      <div class="slide-header">
+        <span class="slide-tag">09 / VERIFICATION & DEMO</span>
+        <h2 class="slide-title">Live Verification Harness: ShopEase Demo Site</h2>
+      </div>
+
+      <div class="card">
+        <h3 class="text-cyan">100% Reliable Live Demonstration Protocol (10 Key Steps)</h3>
+        <ol class="demo-steps">
+          <li>Open ShopEase e-commerce demo store (<code>localhost:3000</code>) with Chrome Extension active.</li>
+          <li>Complete registration form (Name, Email, Phone) and check Marketing Consent box.</li>
+          <li>Extension content script passively captures submit metadata; background worker posts event to REST API.</li>
+          <li>Extension toast displays: <em>"Privacy Activity Detected on ShopEase"</em>. Extension popup reflects active consents.</li>
+          <li>Launch Web Dashboard (<code>localhost:5173</code>). Footprint grid renders ShopEase card with Medium risk rating.</li>
+          <li>Observe Digital Privacy Score drop from 85 ➔ 72 due to active marketing consent.</li>
+          <li>Trigger "AI Policy Summary" modal to view plain-English policy breakdown.</li>
+          <li>Click <strong>[Revoke Marketing Consent]</strong> ➔ Tier 1 Direct API executes ➔ Consent status updates instantly to REVOKED.</li>
+          <li>Click <strong>[Request Account Deletion]</strong> ➔ Tier 3 Legal Generator opens ➔ Click <strong>[Submit Legal Request]</strong>.</li>
+          <li>Verify Privacy Request Tracker updates status to PENDING RESPONSE & Audit Log records exact timestamped proof.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- SLIDE 11 -->
+    <section class="slide" data-slide="11">
+      <div class="slide-header">
+        <span class="slide-tag">10 / TEAM ALLOCATION</span>
+        <h2 class="slide-title">Implementation Progress & File Ownership Matrix</h2>
+      </div>
+
+      <table class="matrix-table">
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Owner</th>
+            <th>Key Files & Responsibility</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>TM 1: Team Lead</strong></td>
+            <td>Integration Architect</td>
+            <td><code>shared/contracts.json</code>, <code>MASTER_DOC</code>, Pitch & Integration</td>
+            <td><span class="badge badge-green">COMPLETED</span></td>
+          </tr>
+          <tr>
+            <td><strong>TM 2: Extension Eng.</strong></td>
+            <td>Chrome MV3 Developer</td>
+            <td><code>extension/content.js</code>, <code>background.js</code>, <code>popup/*</code></td>
+            <td><span class="badge badge-green">COMPLETED</span></td>
+          </tr>
+          <tr>
+            <td><strong>TM 3: Dashboard Eng.</strong></td>
+            <td>React Frontend Developer</td>
+            <td><code>src/components/*</code>, <code>mockDashboardData.json</code></td>
+            <td><span class="badge badge-green">COMPLETED</span></td>
+          </tr>
+          <tr>
+            <td><strong>TM 4: Backend Eng.</strong></td>
+            <td>Express & Prisma Developer</td>
+            <td><code>backend/server.js</code>, <code>schema.prisma</code>, <code>shopease-demo/*</code></td>
+            <td><span class="badge badge-green">COMPLETED</span></td>
+          </tr>
+          <tr>
+            <td><strong>TM 5: AI & Privacy Eng.</strong></td>
+            <td>Intelligence Engineer</td>
+            <td><code>backend/services/aiService.js</code>, <code>privacyScore.js</code></td>
+            <td><span class="badge badge-green">COMPLETED</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- SLIDE 12 -->
+    <section class="slide" data-slide="12">
+      <div class="slide-header">
+        <span class="slide-tag">11 / FUTURE ROADMAP</span>
+        <h2 class="slide-title">Strategic Roadmap & Committee Q&A Defense</h2>
+      </div>
+
+      <div class="split-2">
+        <div class="card">
+          <h3 class="text-cyan">🚀 Future Production Milestones</h3>
+          <div class="roadmap-list">
+            <div class="roadmap-item">
+              <strong class="text-amber">Phase 2: Automated Email Parsing</strong>
+              <p>Integrate IMAP / Gmail API to automatically parse response emails from data fiduciaries and update status in Request Tracker.</p>
+            </div>
+            <div class="roadmap-item">
+              <strong class="text-amber">Phase 3: Multi-Language Notices</strong>
+              <p>Support localized DPDP notice templates across 12 Indian regional languages for broad accessibility.</p>
+            </div>
+            <div class="roadmap-item">
+              <strong class="text-amber">Phase 4: Enterprise Partner Portal</strong>
+              <p>Expose webhooks & SDK for data fiduciaries to implement Tier 1 Direct API deletion seamlessly.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-indigo">
+          <h3 class="text-indigo">❓ Committee Q&A Readiness</h3>
+          <div class="qa-list">
+            <div class="qa-item">
+              <strong class="text-green">Q: How do you handle password safety?</strong>
+              <p>A: Password inputs (type="password") and credit card fields are strictly filtered at content script layer and never leave the DOM.</p>
+            </div>
+            <div class="qa-item">
+              <strong class="text-green">Q: Why not auto-delete on all sites?</strong>
+              <p>A: Universal auto-deletion is impossible due to auth & CSRF. Our 3-tier engine provides an honest, reliable alternative.</p>
+            </div>
+            <div class="qa-item">
+              <strong class="text-green">Q: How does this align with DPDP 2023?</strong>
+              <p>A: Directly enforces Data Principal rights under §6 (Consent Withdrawal) & §12 (Data Erasure) with timestamped audit logs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="slides.js"></script>
+</body>
+</html>
