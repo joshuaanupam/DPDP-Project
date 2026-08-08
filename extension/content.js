@@ -408,28 +408,31 @@ function handleFormSubmit(form) {
   // Send payload only if relevant exposure data types or consents were detected
   if (dataTypes.length > 0 || consents.length > 0) {
     const domain = normalizeDomain(window.location.hostname);
-    
-    chrome.storage.local.get(['childSafeMode'], (res) => {
-      const isChildSafe = res.childSafeMode || false;
-      const tracking = detectBehavioralTracking();
+    if (!isExtensionContextValid()) return;
+    try {
+      chrome.storage.local.get(['childSafeMode'], (res) => {
+        if (!isExtensionContextValid()) return;
+        const isChildSafe = (res && res.childSafeMode) || false;
+        const tracking = detectBehavioralTracking();
 
-      // Privacy-preserving metadata payload - NO PII, values, or credentials included!
-      const payload = {
-        type: 'FORM_SUBMISSION',
-        domain: domain,
-        dataTypes: dataTypes,
-        consents: consents,
-        eventType: 'FORM_SUBMISSION',
-        timestamp: new Date().toISOString(),
-        eventId: 'evt_' + Math.random().toString(36).substring(2, 11),
-        childSafeMode: isChildSafe,
-        behavioralTracking: tracking
-      };
+        // Privacy-preserving metadata payload - NO PII, values, or credentials included!
+        const payload = {
+          type: 'FORM_SUBMISSION',
+          domain: domain,
+          dataTypes: dataTypes,
+          consents: consents,
+          eventType: 'FORM_SUBMISSION',
+          timestamp: new Date().toISOString(),
+          eventId: 'evt_' + Math.random().toString(36).substring(2, 11),
+          childSafeMode: isChildSafe,
+          behavioralTracking: tracking
+        };
 
-      chrome.runtime.sendMessage(payload).catch(() => {
-        // Ignore errors when extension context is invalidated
+        try {
+          chrome.runtime.sendMessage(payload).catch(() => {});
+        } catch (e) {}
       });
-    });
+    } catch (e) {}
   }
 }
 
@@ -459,26 +462,37 @@ window.addEventListener('load', () => {
 // Passively notify background script of website page navigation (for Recent Website Activity tracking)
 if (window.location.protocol.startsWith('http')) {
   const currentDomain = normalizeDomain(window.location.hostname);
-  if (currentDomain && currentDomain !== 'unknown') {
-    chrome.storage.local.get(['childSafeMode'], (res) => {
-      chrome.runtime.sendMessage({
-        type: 'PAGE_VISIT',
-        domain: currentDomain,
-        url: window.location.href,
-        timestamp: new Date().toISOString(),
-        childSafeMode: res.childSafeMode || false,
-        behavioralTracking: detectBehavioralTracking()
-      }).catch(() => {});
-    });
+  if (currentDomain && currentDomain !== 'unknown' && isExtensionContextValid()) {
+    try {
+      chrome.storage.local.get(['childSafeMode'], (res) => {
+        if (!isExtensionContextValid()) return;
+        const isChildSafe = (res && res.childSafeMode) || false;
+        try {
+          chrome.runtime.sendMessage({
+            type: 'PAGE_VISIT',
+            domain: currentDomain,
+            url: window.location.href,
+            timestamp: new Date().toISOString(),
+            childSafeMode: isChildSafe,
+            behavioralTracking: detectBehavioralTracking()
+          }).catch(() => {});
+        } catch (e) {}
+      });
+    } catch (e) {}
   }
 }
 // Message bus listener for DOM tracking queries
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'CHECK_BEHAVIORAL_TRACKING') {
-    sendResponse(detectBehavioralTracking());
-    return true;
+try {
+  if (isExtensionContextValid()) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (!isExtensionContextValid()) return;
+      if (message && message.type === 'CHECK_BEHAVIORAL_TRACKING') {
+        sendResponse(detectBehavioralTracking());
+        return true;
+      }
+    });
   }
-});
+} catch (e) {}
 
 
 // ============================================================
