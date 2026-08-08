@@ -169,6 +169,108 @@ export const PrivacyProvider = ({ children }) => {
 
   const processedSyncIds = React.useRef(new Set());
 
+  // Restore Authentication Session & Sync Check on Mount
+  React.useEffect(() => {
+    const token = localStorage.getItem('privacylens_token');
+
+    // Listener for response from extension via postMessage
+    const handleAuthMessage = (e) => {
+      const message = e.data;
+      if (message && message.direction === 'from-content-script') {
+        console.log('[PrivacyLens Dashboard] Received auth message from content script:', message);
+        if (message.type === 'ExtensionSessionResponse') {
+          console.log('[PrivacyLens Dashboard] Extension is Active (received session response)');
+          setExtensionStatus('Active');
+          hasDetectedExtension.current = true;
+          if (pingTimeoutRef.current) {
+            clearTimeout(pingTimeoutRef.current);
+            pingTimeoutRef.current = null;
+          }
+
+          const extensionSession = message.detail;
+          if (extensionSession && extensionSession.token) {
+            localStorage.setItem('privacylens_token', extensionSession.token);
+            validateSession(extensionSession.token);
+          } else {
+            setAuthLoading(false);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleAuthMessage);
+
+    if (token) {
+      validateSession(token);
+    } else {
+      // Query extension to see if it has a session via postMessage
+      window.postMessage({ direction: 'from-page', type: 'GetExtensionSession' }, '*');
+
+      // Fallback timeout to ensure dashboard shows login if extension is offline or no session
+      const timer = setTimeout(() => {
+        setAuthLoading(false);
+      }, 1000);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('message', handleAuthMessage);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('message', handleAuthMessage);
+    };
+  }, []);
+
+  // Heartbeat query for MV3 extension status (Installed/Enabled -> Active, Disabled -> Off, Not Installed -> Not Installed)
+  React.useEffect(() => {
+    const handlePingPong = (e) => {
+      const message = e.data;
+      if (message && message.direction === 'from-content-script' && message.type === 'PongExtension') {
+        console.log('[PrivacyLens Dashboard] Received PongExtension from content script');
+        setExtensionStatus('Active');
+        hasDetectedExtension.current = true;
+        if (pingTimeoutRef.current) {
+          clearTimeout(pingTimeoutRef.current);
+          pingTimeoutRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener('message', handlePingPong);
+
+    const checkStatus = () => {
+      // Clear any existing active timeout first
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+
+      // Set timeout to wait for pong response
+      pingTimeoutRef.current = setTimeout(() => {
+        console.log('[PrivacyLens Dashboard] Ping timeout fired. hasDetectedExtension:', hasDetectedExtension.current);
+        if (hasDetectedExtension.current) {
+          setExtensionStatus('Off');
+        } else {
+          setExtensionStatus('Not Installed');
+        }
+      }, 1500);
+
+      console.log('[PrivacyLens Dashboard] Posting PingExtension to page...');
+      window.postMessage({ direction: 'from-page', type: 'PingExtension' }, '*');
+    };
+
+    const interval = setInterval(checkStatus, 5000);
+    // Initial immediate ping
+    checkStatus();
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('message', handlePingPong);
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Load live data from backend on mount and listen for authoritative Chrome Extension sync
   React.useEffect(() => {
     fetchDashboardData();
