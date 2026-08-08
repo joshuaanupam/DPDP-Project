@@ -3,7 +3,7 @@ import { Globe, Shield, Clock, ShieldAlert, Sparkles, TrendingUp, AlertTriangle,
 import { usePrivacy } from '../context/PrivacyContext';
 import { DigitalFootprintGrid } from './DigitalFootprintGrid';
 
-export const OverviewStats = ({ activeTab, setActiveTab }) => {
+export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
   const { stats } = usePrivacy();
 
   const getScoreColor = (score) => {
@@ -17,21 +17,12 @@ export const OverviewStats = ({ activeTab, setActiveTab }) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
       
-      {/* Stat 1: Digital Footprint Overview (clickable) */}
+      {/* Stat 1: Digital Footprint Overview (clickable accordion) */}
       <div
-        className={`bg-beige-50 dark:bg-zinc-900/60 rounded-lg relative overflow-hidden transition-all text-left w-full ${activeTab === 'FOOTPRINT' ? 'col-span-1 sm:col-span-2 lg:col-span-4 ring-2 ring-beige-900/30 dark:ring-beige-300/30' : ''}`}
+        className={`bg-beige-50 dark:bg-zinc-900/60 rounded-lg relative overflow-hidden transition-all text-left w-full ${footprintExpanded ? 'col-span-1 sm:col-span-2 lg:col-span-4 ring-2 ring-beige-900/30 dark:ring-beige-300/30' : ''}`}
       >
         <div 
-          onClick={() => {
-            if (setActiveTab) {
-              setActiveTab(activeTab === 'FOOTPRINT' ? null : 'FOOTPRINT');
-              if (activeTab !== 'FOOTPRINT') {
-                setTimeout(() => {
-                  document.getElementById('overview-stat-footprint')?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-              }
-            }
-          }}
+          onClick={() => setFootprintExpanded(prev => !prev)}
           id="overview-stat-footprint"
           className="p-5 cursor-pointer hover:ring-2 hover:ring-beige-900/30 dark:hover:ring-beige-300/30 transition-all group relative z-10"
         >
@@ -52,11 +43,11 @@ export const OverviewStats = ({ activeTab, setActiveTab }) => {
             <span className="text-beige-800 dark:text-zinc-400 flex items-center">
               <Sparkles className="w-3 h-3 mr-1 text-beige-900 dark:text-beige-300" /> Click to View
             </span>
-            <span className="text-beige-900 dark:text-beige-300 font-bold flex items-center gap-1"><ArrowUpRight className="w-3 h-3" /> {activeTab === 'FOOTPRINT' ? 'Close' : 'Open'}</span>
+            <span className="text-beige-900 dark:text-beige-300 font-bold flex items-center gap-1"><ArrowUpRight className="w-3 h-3" /> {footprintExpanded ? 'Close' : 'Open'}</span>
           </div>
         </div>
 
-        {activeTab === 'FOOTPRINT' && (
+        {footprintExpanded && (
           <div className="border-t border-beige-400/30 dark:border-zinc-800/60 p-2 sm:p-5 relative z-10 bg-white/50 dark:bg-zinc-950/50">
             <DigitalFootprintGrid />
           </div>
