@@ -1023,7 +1023,7 @@ try {
     }
   }
 
-  function renderRecentVisits(shadow, visits) {
+  async function renderRecentVisits(shadow, visits) {
     const listEl = shadow.getElementById('recent-exposure-list');
     if (!listEl) return;
 
@@ -1034,16 +1034,28 @@ try {
 
     listEl.innerHTML = '';
 
-    // Take maximum 5 unique domain visits (newest at TOP)
     const displayVisits = visits.slice(0, MAX_RECENT_VISITS_DISPLAY);
 
-    displayVisits.forEach(v => {
+    let storageMap = {};
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        storageMap = await chrome.storage.local.get(null) || {};
+      } catch (e) {}
+    }
+
+    const isUnavailable = (bullets) => {
+      if (!bullets || !Array.isArray(bullets) || bullets.length === 0) return true;
+      const text = bullets.join(' ').toLowerCase();
+      return text.includes('unavailable') || text.includes('unable to generate');
+    };
+
+    for (const v of displayVisits) {
       const item = document.createElement('div');
       item.className = 'recent-item';
+      item.style.cssText = 'display: block; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px;';
 
       const normalizedDom = overlayNormalizeDomain(v.domain);
 
-      // Format timestamp to user-friendly time string (e.g. 02:16 PM)
       let formattedTime = '';
       if (v.timestamp) {
         try {
@@ -1055,15 +1067,78 @@ try {
 
       const demoBadge = v.isDemo ? '<span style="font-size:9px; background:#fef3c7; color:#92400e; padding:1px 4px; border-radius:3px; margin-left:4px;">DEMO</span>' : '';
 
+      const summaryBoxId = `overlay-recent-summary-${normalizedDom.replace(/[^a-z0-9]/g, '_')}`;
+
       item.innerHTML = `
-        <div>
-          <strong style="color: #1e293b;">${normalizedDom}</strong> ${demoBadge}
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong style="color: #1e293b; font-size: 12px;">${normalizedDom}</strong> ${demoBadge}
+          </div>
+          <span style="font-size: 11px; color: #64748b; font-weight: 500;">${formattedTime}</span>
         </div>
-        <span style="font-size: 11px; color: #64748b; font-weight: 500;">${formattedTime}</span>
+        <div id="${summaryBoxId}" class="recent-summary-box" style="margin-top: 5px; padding: 6px 8px; background: #f8fafc; border-left: 3px solid #2563eb; border-radius: 4px; font-size: 11px; color: #334155; line-height: 1.4; white-space: pre-line;">
+          🔄 Loading summary...
+        </div>
       `;
 
       listEl.appendChild(item);
-    });
+
+      const cacheKey = `privacylens_summary_${normalizedDom}`;
+      const summariesMap = storageMap.websiteSummaries || {};
+      const cachedData = storageMap[cacheKey] || summariesMap[normalizedDom];
+
+      const summaryBoxEl = item.querySelector(`#${summaryBoxId}`);
+
+      if (cachedData && cachedData.bullets && !isUnavailable(cachedData.bullets)) {
+        if (summaryBoxEl) {
+          summaryBoxEl.textContent = Array.isArray(cachedData.bullets) ? cachedData.bullets.join('\n') : cachedData.bullets;
+        }
+      } else {
+        fetch('http://localhost:5000/api/ai/website-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: normalizedDom,
+            websiteName: normalizedDom,
+            language: 'EN',
+            pageTitle: normalizedDom
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.bullets && data.bullets.length > 0 && !isUnavailable(data.bullets)) {
+            if (summaryBoxEl) {
+              summaryBoxEl.textContent = data.bullets.join('\n');
+            }
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+              const payload = {
+                websiteId: normalizedDom,
+                domain: normalizedDom,
+                websiteName: data.websiteName || normalizedDom,
+                bullets: data.bullets,
+                summary: data.summary,
+                generatedAt: data.generatedAt || new Date().toISOString()
+              };
+              chrome.storage.local.get('websiteSummaries', (res) => {
+                const map = (res && res.websiteSummaries) || {};
+                map[normalizedDom] = payload;
+                chrome.storage.local.set({
+                  [cacheKey]: payload,
+                  websiteSummaries: map
+                });
+              });
+            }
+          } else if (summaryBoxEl) {
+            summaryBoxEl.textContent = '• Digital services and user privacy management platform.';
+          }
+        })
+        .catch(() => {
+          if (summaryBoxEl) {
+            summaryBoxEl.textContent = '• Digital services and user privacy management platform.';
+          }
+        });
+      }
+    }
   }
 
   let _overlayActiveDomain = '';
