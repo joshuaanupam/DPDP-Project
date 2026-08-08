@@ -435,44 +435,13 @@ function renderRecentVisits(visits) {
 }
 
 let currentActiveDomain = '';
-let currentSelectedLanguage = 'EN';
 
-
-/**
- * Setup language selector buttons in WEBSITE SUMMARY card
- */
-function setupLanguageSelector(activeTabState, activeTabId) {
-  const langSelector = document.getElementById('brief-lang-selector');
-  if (!langSelector) return;
-
-  const btns = langSelector.querySelectorAll('.brief-lang-btn');
-  btns.forEach(btn => {
-    btn.onclick = async (e) => {
-      e.preventDefault();
-      const lang = btn.getAttribute('data-lang');
-      currentSelectedLanguage = lang;
-      btns.forEach(b => {
-        if (b.getAttribute('data-lang') === lang) {
-          b.style.background = '#2563eb';
-          b.style.color = 'white';
-          b.classList.add('active');
-        } else {
-          b.style.background = 'transparent';
-          b.style.color = '#64748b';
-          b.classList.remove('active');
-        }
-      });
-      if (activeTabState && activeTabState.domain) {
-        await loadWebsiteBrief(activeTabState, activeTabId, false);
-      }
-    };
-  });
-}
 
 /**
  * Loads, caches, and renders the AI-powered Website Summary.
  * Uses strict domain keying: privacylens_summary_<normalized_domain>
  * Shared between Extension, Website Details, and Reclaim panel.
+ * English Only for Chrome Extension & RECLAIM popup.
  */
 async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = false) {
   const card = document.getElementById('website-brief-card');
@@ -492,16 +461,20 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
   currentActiveDomain = normDomain;
   card.style.display = 'block';
 
-  // Setup language selector event handlers
-  setupLanguageSelector(activeTabState, activeTabId);
-
   // 2. Strict Domain-Keyed Cache Check: privacylens_summary_<domain>
   const cacheKey = `privacylens_summary_${normDomain}`;
   const storage = await chrome.storage.local.get([cacheKey, 'websiteSummaries']);
   const summariesMap = storage.websiteSummaries || {};
   const cachedData = storage[cacheKey] || summariesMap[normDomain];
 
-  if (cachedData && !forceRefresh) {
+  // Helper to check if cached bullets contain fallback unavailable error messages
+  const isUnavailableCache = (data) => {
+    if (!data || !data.bullets || !Array.isArray(data.bullets) || data.bullets.length === 0) return true;
+    const combined = data.bullets.join(' ').toLowerCase();
+    return combined.includes('unavailable') || combined.includes('unable to generate');
+  };
+
+  if (cachedData && !forceRefresh && !isUnavailableCache(cachedData)) {
     siteTitle.textContent = cachedData.websiteName || normDomain;
     const bullets = cachedData.bullets || (cachedData.summary ? [cachedData.summary] : []);
     textEl.textContent = Array.isArray(bullets) ? bullets.join('\n') : bullets;
@@ -555,7 +528,7 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
       body: JSON.stringify({
         domain: normDomain,
         websiteName: domMetadata.title ? domMetadata.title.split('|')[0].trim() : normDomain,
-        language: currentSelectedLanguage,
+        language: 'EN',
         pageTitle: domMetadata.title || activeTabState.title,
         metaDescription: domMetadata.metaDescription || '',
         headings: domMetadata.headings || [],

@@ -3,12 +3,16 @@ import { ShieldAlert, Send, FileText, CheckCircle2, Copy, Sparkles, ChevronRight
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const BreachWizard = () => {
-  const { userData } = usePrivacy();
+  const { userData, websites = [], reportMockBreach } = usePrivacy();
   const [currentStep, setCurrentStep] = useState(1); // 1: Profile, 2: Containment, 3: Notices
 
+  // Default to first website
+  const defaultWebsite = websites.length > 0 ? websites[0] : null;
+
   const [profile, setProfile] = useState({
-    domain: 'shopease.com',
-    orgName: 'ShopEase Retail Private Limited',
+    websiteId: defaultWebsite ? defaultWebsite.id : '',
+    domain: defaultWebsite ? defaultWebsite.domain : 'shopease.com',
+    orgName: defaultWebsite ? defaultWebsite.name + ' Inc' : 'ShopEase Retail Private Limited',
     detectionDate: new Date().toISOString().split('T')[0],
     affectedUsers: '10,000 - 50,000',
     breachType: 'Ransomware / Unauthorized DB Access',
@@ -36,6 +40,19 @@ export const BreachWizard = () => {
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfile(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleWebsiteChange = (e) => {
+    const selectedId = e.target.value;
+    const selectedSite = websites.find(w => w.id === selectedId);
+    if (selectedSite) {
+      setProfile(prev => ({
+        ...prev,
+        websiteId: selectedSite.id,
+        domain: selectedSite.domain,
+        orgName: selectedSite.name + ' Compliance Division'
+      }));
+    }
   };
 
   const handleCheckboxChange = (field) => {
@@ -188,21 +205,24 @@ ${profile.orgName}`;
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 block">Select Affected Website</label>
+              <select
+                name="websiteId"
+                value={profile.websiteId}
+                onChange={handleWebsiteChange}
+                className="w-full py-2 px-3 rounded-xl glass-input text-xs font-medium"
+              >
+                {websites.map(w => (
+                  <option key={w.id} value={w.id} className="bg-[#131B2E]">{w.name} ({w.domain})</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 block">Organization Legal Name</label>
               <input
                 type="text"
                 name="orgName"
                 value={profile.orgName}
-                onChange={handleProfileChange}
-                className="w-full py-2 px-3 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 block">Corporate Domain</label>
-              <input
-                type="text"
-                name="domain"
-                value={profile.domain}
                 onChange={handleProfileChange}
                 className="w-full py-2 px-3 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
               />
@@ -414,8 +434,15 @@ ${profile.orgName}`;
           </button>
         ) : (
           <button
-            onClick={() => {
-              alert('Statutory notices generated and logged in audit log.');
+            onClick={async () => {
+              const severity = profile.affectedUsers.includes('50,000') || profile.affectedUsers.includes('10,000') ? 'High' : 'Medium';
+              const affectedCount = profile.affectedUsers.includes('50,000') ? 55000 : 25000;
+              const res = await reportMockBreach(profile.websiteId, boardNoticeText, affectedCount, severity);
+              if (res && res.success) {
+                alert('Statutory notices generated and logged in database. Affected users\' Privacy Scores updated!');
+              } else {
+                alert('Failed to log breach in database.');
+              }
               setCurrentStep(1);
             }}
             className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-bold text-xs shadow-lg shadow-emerald-500/30 transition-all flex items-center space-x-2"

@@ -3,7 +3,7 @@ import { Shield, Sparkles, Layers, FileText, History, UserPlus, ShieldAlert, Sca
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const Sidebar = ({ activeTab, setActiveTab }) => {
-  const { userData, logout, featureToggles, toggleFeature } = usePrivacy();
+  const { userData, logout, featureToggles, toggleFeature, updateChildConsent } = usePrivacy();
   const [showSettings, setShowSettings] = useState(false);
 
   const allNavItems = [
@@ -104,6 +104,45 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Child Safe Mode Section */}
+          <div className="mt-4 border-t border-beige-400/20 dark:border-zinc-800/40 pt-4">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-beige-600 dark:text-zinc-500 px-1 mb-2">
+              Child Safe Mode (§9)
+            </p>
+            <div className="bg-beige-50 dark:bg-zinc-900/60 border border-beige-400/30 dark:border-zinc-800 rounded-lg p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900 dark:text-white">Enable Child Mode</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const isChildNext = !userData.isChild;
+                    await updateChildConsent(isChildNext, isChildNext ? (userData.parentEmail || '') : null);
+                  }}
+                  className={`relative w-8 h-4 rounded-full transition-colors shrink-0 ${userData.isChild ? 'bg-amber-500' : 'bg-beige-300 dark:bg-zinc-700'}`}
+                >
+                  <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white dark:bg-zinc-950 shadow transition-transform ${userData.isChild ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              {userData.isChild && (
+                <div className="space-y-1.5 animate-fadeIn">
+                  <label className="block text-[10px] font-bold text-beige-700 dark:text-zinc-400">Parent/Guardian Email</label>
+                  <input
+                    type="email"
+                    defaultValue={userData.parentEmail || ''}
+                    placeholder="parent@example.com"
+                    onBlur={async (e) => {
+                      await updateChildConsent(true, e.target.value);
+                    }}
+                    className="w-full px-2 py-1 rounded text-xs bg-white dark:bg-zinc-800 border border-beige-400/40 dark:border-zinc-700 text-slate-900 dark:text-white focus:outline-none"
+                  />
+                  <p className="text-[9px] text-amber-600 dark:text-amber-400 leading-snug">
+                    ⚠️ Verifiable parental consent required. Section 9 blocks tracking & targeted ads.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

@@ -136,17 +136,22 @@ function calculateUserPrivacyScoreFromData({
 
   // Evaluate Child Data Penalty dynamically
   let childPenaltyActive = isChildWithoutParentalConsent;
-  if (user && user.dob) {
-    const age = calculateAge(user.dob);
-    if (age < 18 && (!user.guardianId && !user.parentConsentActive)) {
+  if (user) {
+    if (user.isChild && !user.parentEmail) {
       childPenaltyActive = true;
+    }
+    if (user.dob) {
+      const age = calculateAge(user.dob);
+      if (age < 18 && (!user.guardianId && !user.parentConsentActive)) {
+        childPenaltyActive = true;
+      }
     }
   }
 
   // Evaluate Data Breach Penalty dynamically
   let breachActive = hasUnresolvedBreaches;
   if (websites && websites.length > 0) {
-    const breachedWebsites = websites.filter(w => w.hasBreach === true || w.isBreached === true || w.unresolvedBreach === true);
+    const breachedWebsites = websites.filter(w => (w.breaches && w.breaches.length > 0) || w.hasBreach === true || w.isBreached === true || w.unresolvedBreach === true);
     if (breachedWebsites.length > 0) {
       breachActive = true;
     }
@@ -273,6 +278,9 @@ async function calculateAndSavePrivacyScore(prisma, userId) {
           { consents: { some: { userId } } },
           { dataItems: { some: { userId } } }
         ]
+      },
+      include: {
+        breaches: true
       }
     });
 

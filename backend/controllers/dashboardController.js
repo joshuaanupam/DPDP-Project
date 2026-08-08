@@ -49,6 +49,12 @@ exports.getDashboardData = async (req, res) => {
     const activeConsentsCount = consents.filter(c => c.status === 'ACTIVE').length;
     const pendingRequestsCount = requests.filter(r => r.status === 'SUBMITTED' || r.status === 'AWAITING_RESPONSE').length;
 
+    const nominees = await prisma.nominee.findMany({ where: { userId } });
+    const breaches = await prisma.dataBreach.findMany({
+      where: { websiteId: { in: websiteIds } },
+      include: { website: true }
+    });
+
     // Format digital footprint website grid data
     const formattedWebsites = websites.map(site => {
       const siteDataItems = dataItems.filter(d => d.websiteId === site.id);
@@ -69,6 +75,7 @@ exports.getDashboardData = async (req, res) => {
         directApiUrl: site.directApiUrl,
         guidedUrl: site.guidedUrl,
         faviconUrl: site.faviconUrl,
+        isSDF: site.isSDF,
         dataItems: siteDataItems.map(d => d.dataType),
         activeConsents: activeConsentNames,
         consents: siteConsents.map(c => ({
@@ -95,14 +102,18 @@ exports.getDashboardData = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        privacyScore: currentPrivacyScore
+        privacyScore: currentPrivacyScore,
+        isChild: user.isChild,
+        parentEmail: user.parentEmail
       },
       stats: {
         totalWebsites: websites.length,
         activeConsents: activeConsentsCount,
         pendingRequests: pendingRequestsCount
       },
-      websites: formattedWebsites
+      websites: formattedWebsites,
+      nominees,
+      breaches
     });
   } catch (error) {
     console.error('Error fetching dashboard data:', error);

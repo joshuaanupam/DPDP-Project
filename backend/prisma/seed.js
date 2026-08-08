@@ -10,6 +10,8 @@ async function runSeed(prismaInstance) {
   await db.privacyRequest.deleteMany();
   await db.consent.deleteMany();
   await db.dataItem.deleteMany();
+  await db.nominee.deleteMany();
+  await db.dataBreach.deleteMany();
   await db.website.deleteMany();
   await db.user.deleteMany();
 
@@ -20,12 +22,27 @@ async function runSeed(prismaInstance) {
       name: 'Joshua',
       email: 'joshua@example.com',
       passwordHash: '$2b$10$e8w3n3G9Q7m4.L.8j3x7u.v6R7N1jQ4M9p8r2W7',
-      privacyScore: 72
+      privacyScore: 72,
+      isChild: false
     }
   });
   console.log(`👤 Created Demo User: ${user.name} (${user.email})`);
 
-  // 2. Create Websites with 3 Deletion Tiers
+  // Create a Child Demo User
+  const childUser = await db.user.create({
+    data: {
+      id: 'usr_child',
+      name: 'Rohan (Child)',
+      email: 'rohan@example.com',
+      passwordHash: '$2b$10$e8w3n3G9Q7m4.L.8j3x7u.v6R7N1jQ4M9p8r2W7',
+      privacyScore: 50,
+      isChild: true,
+      parentEmail: 'joshua@example.com'
+    }
+  });
+  console.log(`👶 Created Child User: ${childUser.name} (${childUser.email})`);
+
+  // 2. Create Websites with 3 Deletion Tiers and isSDF flag
   const shopEase = await db.website.create({
     data: {
       id: 'web_shopease',
@@ -35,7 +52,8 @@ async function runSeed(prismaInstance) {
       riskLevel: 'Medium',
       deletionTier: 1, // Tier 1: Direct API
       directApiUrl: 'http://localhost:3000/api/partner/revoke',
-      guidedUrl: 'http://localhost:3000/account'
+      guidedUrl: 'http://localhost:3000/account',
+      isSDF: false
     }
   });
 
@@ -47,7 +65,8 @@ async function runSeed(prismaInstance) {
       category: 'Social Network',
       riskLevel: 'High',
       deletionTier: 2, // Tier 2: Guided URL
-      guidedUrl: 'https://socialhub.io/settings/privacy/delete'
+      guidedUrl: 'https://socialhub.io/settings/privacy/delete',
+      isSDF: true // Significant Data Fiduciary
     }
   });
 
@@ -58,7 +77,8 @@ async function runSeed(prismaInstance) {
       name: 'CloudData Services',
       category: 'Cloud Storage',
       riskLevel: 'Low',
-      deletionTier: 3 // Tier 3: DPDP Legal Notice Generator
+      deletionTier: 3, // Tier 3: DPDP Legal Notice Generator
+      isSDF: false
     }
   });
 
@@ -70,13 +90,38 @@ async function runSeed(prismaInstance) {
       category: 'E-Commerce',
       riskLevel: 'Medium',
       deletionTier: 1,
-      directApiUrl: 'http://localhost:3000/api/partner/revoke'
+      directApiUrl: 'http://localhost:3000/api/partner/revoke',
+      isSDF: false
     }
   });
 
   console.log('🌐 Created Websites across Tiers 1, 2, and 3');
 
-  // 3. Create Data Items Shared with Websites
+  // 3. Create Nominees
+  await db.nominee.create({
+    data: {
+      userId: user.id,
+      name: 'Karanam Mahesh',
+      email: 'mahesh@example.com',
+      relationship: 'Brother',
+      confirmed: true
+    }
+  });
+  console.log('🛡️ Created Nominee for User Joshua');
+
+  // 4. Create Data Breach records
+  await db.dataBreach.create({
+    data: {
+      websiteId: socialHub.id,
+      description: 'Unauthorized access to user profile details and location records.',
+      affectedCount: 50000,
+      reportedToBoard: true,
+      severity: 'High'
+    }
+  });
+  console.log('🚨 Created Data Breach record for SocialHub');
+
+  // 5. Create Data Items Shared with Websites
   await db.dataItem.createMany({
     data: [
       { userId: user.id, websiteId: shopEase.id, dataType: 'Email' },
@@ -90,11 +135,15 @@ async function runSeed(prismaInstance) {
       { userId: user.id, websiteId: cloudData.id, dataType: 'Email' },
       { userId: user.id, websiteId: cloudData.id, dataType: 'Phone' },
 
-      { userId: user.id, websiteId: quickBuy.id, dataType: 'Email' }
+      { userId: user.id, websiteId: quickBuy.id, dataType: 'Email' },
+
+      // Child data items
+      { userId: childUser.id, websiteId: socialHub.id, dataType: 'Name' },
+      { userId: childUser.id, websiteId: socialHub.id, dataType: 'Location' }
     ]
   });
 
-  // 4. Create Active and Revoked Consents
+  // 6. Create Active and Revoked Consents
   await db.consent.createMany({
     data: [
       { userId: user.id, websiteId: shopEase.id, consentType: 'Account Creation', status: 'ACTIVE' },
@@ -105,11 +154,15 @@ async function runSeed(prismaInstance) {
       { userId: user.id, websiteId: socialHub.id, consentType: 'Targeted Advertising', status: 'ACTIVE' },
 
       { userId: user.id, websiteId: cloudData.id, consentType: 'Account Creation', status: 'ACTIVE' },
-      { userId: user.id, websiteId: cloudData.id, consentType: 'Promotional Updates', status: 'REVOKED', revokedAt: new Date(Date.now() - 86400000) }
+      { userId: user.id, websiteId: cloudData.id, consentType: 'Promotional Updates', status: 'REVOKED', revokedAt: new Date(Date.now() - 86400000) },
+
+      // Child consents
+      { userId: childUser.id, websiteId: socialHub.id, consentType: 'Account Creation', status: 'ACTIVE' },
+      { userId: childUser.id, websiteId: socialHub.id, consentType: 'Targeted Advertising', status: 'ACTIVE' }
     ]
   });
 
-  // 5. Create Initial Privacy Requests
+  // 7. Create Initial Privacy Requests
   await db.privacyRequest.create({
     data: {
       userId: user.id,
@@ -132,7 +185,7 @@ async function runSeed(prismaInstance) {
     }
   });
 
-  // 6. Create Chronological Audit Logs
+  // 8. Create Chronological Audit Logs
   await db.auditLog.createMany({
     data: [
       {

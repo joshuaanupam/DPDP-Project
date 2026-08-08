@@ -13,13 +13,13 @@ import { PenaltyShield } from '../components/PenaltyShield';
 import { NominationForm } from '../components/NominationForm';
 import { BreachWizard } from '../components/BreachWizard';
 import { LoginPage } from '../components/LoginPage';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ShieldAlert } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState('FOOTPRINT'); // 'FOOTPRINT', 'TRACKER', 'AUDIT'
   const [footprintExpanded, setFootprintExpanded] = useState(false); // grid collapsed by default
-  const { resetDashboard, isAuthenticated, authLoading, featureToggles } = usePrivacy();
+  const { resetDashboard, isAuthenticated, authLoading, featureToggles, breaches } = usePrivacy();
 
   // Auto-redirect if active tab's feature gets disabled
   React.useEffect(() => {
@@ -53,6 +53,29 @@ export const DashboardPage = () => {
         {/* Main Content Area */}
         <main className="flex-1 p-6 space-y-6 max-w-6xl w-full mx-auto">
           
+          {/* Active Breach Alerts (§8(6)) */}
+          {featureToggles.breachReporter && breaches && breaches.length > 0 && (
+            <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex items-start space-x-3 text-rose-500 animate-pulse">
+              <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-xs font-extrabold uppercase tracking-wider">🚨 Critical Data Breach Detected (§8(6))</h4>
+                <p className="text-xs text-slate-800 dark:text-zinc-300 mt-1">
+                  The following tracked websites have active data breaches reported to the Board:
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {breaches.map(b => (
+                    <span key={b.id} className="text-[10px] font-bold px-2 py-0.5 bg-rose-500/20 border border-rose-500/30 rounded-lg">
+                      {b.website?.name || 'Unknown Website'} ({b.severity} Severity)
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[10px] text-rose-400 mt-1.5">
+                  We highly recommend revoking consents or requesting data erasure using the footprint grid below.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Welcome / Hero Banner */}
           <div className="glass-panel rounded-2xl p-6 relative overflow-hidden border border-beige-400/30 dark:border-zinc-800 shadow-md">
             <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-beige-900/5 rounded-full blur-3xl pointer-events-none"></div>
