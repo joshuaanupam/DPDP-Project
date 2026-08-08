@@ -7,6 +7,18 @@
 
 // Explicitly forbidden input types, names, and autocomplete attributes for security
 const SENSITIVE_TYPES = ['password', 'hidden', 'file'];
+
+/**
+ * Safely checks if the Chrome Extension runtime context is valid.
+ * Protects against uncaught "Extension context invalidated" errors when extension reloads unpacked.
+ */
+function isExtensionContextValid() {
+  try {
+    return Boolean(typeof chrome !== 'undefined' && chrome && chrome.runtime && chrome.runtime.id);
+  } catch (e) {
+    return false;
+  }
+}
 const SENSITIVE_KEYWORDS = [
   'password', 'pass', 'pwd', 'secret', 'token', 'auth', 
   'card', 'cc', 'creditcard', 'cvv', 'cvc', 'exp', 'account',
@@ -1030,86 +1042,88 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------------------------------------------
 
   function refreshOverlayUI() {
-    if (!chrome.runtime || !chrome.runtime.id) return;
     try {
+      if (!isExtensionContextValid()) return;
       chrome.runtime.sendMessage({ type: 'GET_EXTENSION_STATE', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
-        if (!chrome.runtime || !chrome.runtime.id || chrome.runtime.lastError) return;
+        try {
+          if (!isExtensionContextValid() || (chrome.runtime && chrome.runtime.lastError)) return;
 
-        const siteData = response || {};
-        const allExposures = siteData.exposures || {};
-        const isDemo = siteData.demoMode || false;
-        const isChildSafe = siteData.childSafeMode || false;
+          const siteData = response || {};
+          const allExposures = siteData.exposures || {};
+          const isDemo = siteData.demoMode || false;
+          const isChildSafe = siteData.childSafeMode || false;
 
-        let visits = siteData.recentWebsiteVisits || [];
-        if (!isDemo) {
-          visits = visits.filter(v => !v.isDemo);
-        }
-
-        // Render floating overlay UI ONLY if Shadow DOM is injected on non-excluded external pages
-        if (_shadowRef) {
-          const activeTabState = {
-            status: 'success',
-            domain: overlayNormalizeDomain(window.location.hostname),
-            title: document.title || window.location.hostname,
-            url: window.location.href,
-            protocol: window.location.protocol.replace(':', '').toUpperCase()
-          };
-
-          if (isInternalUrl(window.location.href)) {
-            activeTabState.status = 'unsupported-page';
+          let visits = siteData.recentWebsiteVisits || [];
+          if (!isDemo) {
+            visits = visits.filter(v => !v.isDemo);
           }
 
-          const currentExp = allExposures[activeTabState.domain] || null;
-          let hasBehavioralTracking = detectBehavioralTracking().hasBehavioralTracking;
-          if (currentExp && (currentExp.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
-            hasBehavioralTracking = true;
-          }
+          // Render floating overlay UI ONLY if Shadow DOM is injected on non-excluded external pages
+          if (_shadowRef) {
+            const activeTabState = {
+              status: 'success',
+              domain: overlayNormalizeDomain(window.location.hostname),
+              title: document.title || window.location.hostname,
+              url: window.location.href,
+              protocol: window.location.protocol.replace(':', '').toUpperCase()
+            };
 
-          // Render Current Active Site Card
-          renderCurrentSite(_shadowRef, activeTabState, currentExp);
-
-          // Render Child Safe Alert (§9)
-          const alertContainer = _shadowRef.getElementById('child-safe-alert-container');
-          if (alertContainer) {
-            if (isChildSafe && hasBehavioralTracking) {
-              alertContainer.innerHTML = `
-                <div class="alert-chip-child" id="child-safe-warning-alert">
-                  ⚠️ WARNING: Children's Behavioral Tracking Detected (§9)
-                </div>
-              `;
-            } else {
-              alertContainer.innerHTML = '';
+            if (isInternalUrl(window.location.href)) {
+              activeTabState.status = 'unsupported-page';
             }
+
+            const currentExp = allExposures[activeTabState.domain] || null;
+            let hasBehavioralTracking = detectBehavioralTracking().hasBehavioralTracking;
+            if (currentExp && (currentExp.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
+              hasBehavioralTracking = true;
+            }
+
+            // Render Current Active Site Card
+            renderCurrentSite(_shadowRef, activeTabState, currentExp);
+
+            // Render Child Safe Alert (§9)
+            const alertContainer = _shadowRef.getElementById('child-safe-alert-container');
+            if (alertContainer) {
+              if (isChildSafe && hasBehavioralTracking) {
+                alertContainer.innerHTML = `
+                  <div class="alert-chip-child" id="child-safe-warning-alert">
+                    ⚠️ WARNING: Children's Behavioral Tracking Detected (§9)
+                  </div>
+                `;
+              } else {
+                alertContainer.innerHTML = '';
+              }
+            }
+
+            // Render Overall Overview Metrics & Privacy Score
+            renderExposureOverview(_shadowRef, allExposures, siteData);
+
+            // Render Recent Website Activity List
+            renderRecentVisits(_shadowRef, visits);
           }
 
-          // Render Overall Overview Metrics & Privacy Score
-          renderExposureOverview(_shadowRef, allExposures, siteData);
-
-          // Render Recent Website Activity List
-          renderRecentVisits(_shadowRef, visits);
-        }
-
-        // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
-        if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('172.20.21.109')) {
-          const syncPayload = {
-            type: 'RECLAIM_EXTENSION_SYNC',
-            eventId: 'sync_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-            timestamp: new Date().toISOString(),
-            webCount: siteData.webCount || 0,
-            exposureCount: siteData.exposureCount || 0,
-            visitedWebsites: siteData.visitedWebsites || [],
-            exposures: siteData.exposures || {},
-            recentWebsiteVisits: visits || [],
-            privacyScore: calculatePrivacyScore(siteData.exposures),
-            childSafeMode: isChildSafe,
-            isExtensionActive: true
-          };
-          try {
-            window.postMessage(syncPayload, '*');
-            window.localStorage.setItem('reclaim_extension_sync', JSON.stringify(syncPayload));
-            window.dispatchEvent(new CustomEvent('reclaim_extension_sync_event', { detail: syncPayload }));
-          } catch (e) {}
-        }
+          // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
+          if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('172.20.21.109')) {
+            const syncPayload = {
+              type: 'RECLAIM_EXTENSION_SYNC',
+              eventId: 'sync_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+              timestamp: new Date().toISOString(),
+              webCount: siteData.webCount || 0,
+              exposureCount: siteData.exposureCount || 0,
+              visitedWebsites: siteData.visitedWebsites || [],
+              exposures: siteData.exposures || {},
+              recentWebsiteVisits: visits || [],
+              privacyScore: calculatePrivacyScore(siteData.exposures),
+              childSafeMode: isChildSafe,
+              isExtensionActive: true
+            };
+            try {
+              window.postMessage(syncPayload, '*');
+              window.localStorage.setItem('reclaim_extension_sync', JSON.stringify(syncPayload));
+              window.dispatchEvent(new CustomEvent('reclaim_extension_sync_event', { detail: syncPayload }));
+            } catch (e) {}
+          }
+        } catch (e) {}
       });
     } catch (e) {
       // Ignore extension context invalidation when extension is reloaded/updated
