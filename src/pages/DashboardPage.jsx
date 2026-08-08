@@ -18,7 +18,13 @@ import { usePrivacy } from '../context/PrivacyContext';
 
 export const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState('FOOTPRINT'); // 'FOOTPRINT', 'TRACKER', 'AUDIT'
-  const { resetDashboard, isAuthenticated, authLoading } = usePrivacy();
+  const { resetDashboard, isAuthenticated, authLoading, featureToggles } = usePrivacy();
+
+  // Auto-redirect if active tab's feature gets disabled
+  React.useEffect(() => {
+    if (activeTab === 'BREACH' && !featureToggles.breachReporter) setActiveTab('FOOTPRINT');
+    if (activeTab === 'PENALTY' && !featureToggles.penaltyShield) setActiveTab('FOOTPRINT');
+  }, [featureToggles, activeTab]);
 
   if (authLoading || !isAuthenticated) {
     return <LoginPage />;
@@ -70,8 +76,8 @@ export const DashboardPage = () => {
             {activeTab === 'TRACKER' && <RequestTracker />}
             {activeTab === 'AUDIT' && <AuditLogTimeline />}
             {activeTab === 'NOMINATION' && <NominationForm />}
-            {activeTab === 'BREACH' && <BreachWizard />}
-            {activeTab === 'PENALTY' && <PenaltyShield />}
+            {activeTab === 'BREACH' && featureToggles.breachReporter && <BreachWizard />}
+            {activeTab === 'PENALTY' && featureToggles.penaltyShield && <PenaltyShield />}
           </div>
 
         </main>
