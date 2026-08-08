@@ -137,16 +137,7 @@ function calculatePrivacyScore(exposuresObj) {
  * Main UI refresh loop — Requests Authoritative Single Source of Truth from background.js
  */
 async function refreshUI() {
-  console.log('[PrivacyLens Popup] refreshUI started');
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'session']);
-  
-  // Ensure session exists so extension metrics are always accessible to the user
   const lockOverlay = document.getElementById('lock-overlay');
-  if (!storage.session) {
-    const defaultSession = { user: 'Joshua', email: 'joshua@example.com', active: true };
-    await chrome.storage.local.set({ session: defaultSession });
-    storage.session = defaultSession;
-  }
   if (lockOverlay) lockOverlay.style.display = 'none';
 
   // Determine active tab details first
