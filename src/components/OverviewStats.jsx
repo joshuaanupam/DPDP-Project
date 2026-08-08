@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, ShieldAlert, Clock, Sparkles, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Globe, ShieldAlert, Clock, Sparkles, AlertTriangle, ArrowUpRight, BarChart2 } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
 import { DigitalFootprintGrid } from './DigitalFootprintGrid';
 
@@ -7,15 +7,13 @@ export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
   const { stats } = usePrivacy();
 
   const getScoreColor = (score) => {
-    if (score >= 80) return { text: 'text-emerald-600 dark:text-emerald-400', bars: ['#10B981','#10B981','#10B981','#10B981','#6ee7b7'], label: 'Low Exposure Risk' };
-    if (score >= 50) return { text: 'text-amber-600 dark:text-amber-400', bars: ['#F59E0B','#F59E0B','#F59E0B','#fcd34d','#fef3c7'], label: 'Moderate Exposure' };
-    return { text: 'text-rose-600 dark:text-rose-400', bars: ['#EF4444','#EF4444','#f87171','#fca5a5','#fee2e2'], label: 'High Exposure' };
+    if (score >= 80) return { text: 'text-emerald-600 dark:text-emerald-400', iconColor: 'text-emerald-500', label: 'Low Exposure Risk' };
+    if (score >= 50) return { text: 'text-amber-600 dark:text-amber-400', iconColor: 'text-amber-500', label: 'Moderate Exposure' };
+    return { text: 'text-rose-600 dark:text-rose-400', iconColor: 'text-rose-500', label: 'High Exposure' };
   };
 
   const scoreInfo = getScoreColor(stats.privacyScore);
 
-  // Mini bar-chart heights proportional to score
-  const barHeights = [0.55, 0.70, 0.85, 1.0, 0.75].map(h => Math.round(h * 32));
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
@@ -102,28 +100,20 @@ export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
         </div>
       </div>
 
-      {/* Stat 4: Privacy Score with mini bar chart */}
+      {/* Stat 4: Privacy Score with bar chart watermark */}
       <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group flex flex-col">
+        {/* Large background watermark — same style as other cards */}
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+          <BarChart2 className={`w-20 h-20 ${scoreInfo.iconColor}`} />
+        </div>
+
         <div className="mb-3 relative z-10">
           <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Privacy Score</span>
         </div>
 
-        <div className="flex items-center justify-between relative z-10 flex-1">
-          <div className="flex items-baseline space-x-1">
-            <span className={`text-3xl font-black font-heading ${scoreInfo.text}`}>{stats.privacyScore}</span>
-            <span className="text-xs font-bold text-slate-500">/ 100</span>
-          </div>
-
-          {/* Mini bar chart replacing the circular SVG */}
-          <div className="flex items-end gap-[3px] h-9">
-            {barHeights.map((h, i) => (
-              <div
-                key={i}
-                style={{ height: `${h}px`, backgroundColor: scoreInfo.bars[i] }}
-                className="w-2 rounded-sm opacity-90"
-              />
-            ))}
-          </div>
+        <div className="flex items-baseline space-x-1 relative z-10 flex-1">
+          <span className={`text-3xl font-black font-heading ${scoreInfo.text}`}>{stats.privacyScore}</span>
+          <span className="text-xs font-bold text-slate-500">/ 100</span>
         </div>
 
         <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 text-[10px] relative z-10">
