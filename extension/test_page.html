@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RECLAIM - Test Form Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 520px;
+      margin: 40px auto;
+      padding: 24px;
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    h2 {
+      margin-top: 0;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    input[type="text"], input[type="email"], input[type="tel"], input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #ffffff;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+    }
+    .checkbox-group label {
+      font-weight: normal;
+      margin-bottom: 0;
+      cursor: pointer;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 6px;
+      width: 100%;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    .notice {
+      background: #eff6ff;
+      border-left: 4px solid #2563eb;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #1e40af;
+      margin-bottom: 20px;
+      border-radius: 0 6px 6px 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>🛡️ RECLAIM Test Form</h2>
+  <div class="subtitle">Use this form to test how RECLAIM passively captures exposure metadata without harvesting passwords or raw personal data.</div>
+
+  <div class="notice">
+    <strong>Security Verification:</strong> When you submit this form, RECLAIM will extract data categories (e.g. Email, Phone, Name, Marketing Consent). Password fields are explicitly ignored.
+  </div>
+
+  <form id="signup-form" onsubmit="event.preventDefault(); alert('Form submitted! Open RECLAIM extension popup to see updated exposure metrics.');">
+    <div class="form-group">
+      <label for="fullName">Full Name:</label>
+      <input type="text" id="fullName" name="fullName" placeholder="Jane Doe">
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email Address:</label>
+      <input type="email" id="email" name="user_email" placeholder="jane@example.com">
+    </div>
+
+    <div class="form-group">
+      <label for="phone">Phone Number:</label>
+      <input type="tel" id="phone" name="user_phone" placeholder="+1 (555) 000-1234">
+    </div>
+
+    <div class="form-group">
+      <label for="password">Password (Explicitly Ignored by Security Filter):</label>
+      <input type="password" id="password" name="user_password" placeholder="••••••••••••">
+    </div>
+
+    <div class="form-group checkbox-group">
+      <input type="checkbox" id="newsletter" name="newsletter_consent" value="yes" checked>
+      <label for="newsletter">Send me promotional marketing emails and newsletter updates</label>
+    </div>
+
+    <div class="form-group checkbox-group">
+      <input type="checkbox" id="terms" name="terms_agree" value="yes">
+      <label for="terms">I accept the Terms of Service and Privacy Policy</label>
+    </div>
+
+    <button type="submit">Submit Form to Test RECLAIM</button>
+  </form>
+</body>
+</html>
