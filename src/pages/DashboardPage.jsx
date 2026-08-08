@@ -54,7 +54,7 @@ export const DashboardPage = () => {
         <main className="flex-1 p-6 space-y-6 max-w-6xl w-full mx-auto">
           
           {/* Active Breach Alerts (§8(6)) */}
-          {breaches && breaches.length > 0 && (
+          {featureToggles.breachReporter && breaches && breaches.length > 0 && (
             <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex items-start space-x-3 text-rose-500 animate-pulse">
               <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
