@@ -81,11 +81,11 @@ export const LoginPage = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-purple-400/20 blur-[120px]" />
-        <div className="absolute -bottom-[10%] right-[10%] w-[40%] h-[40%] rounded-full bg-cyan-400/20 blur-[120px]" />
-        <div className="glass-panel rounded-3xl p-8 max-w-sm w-full mx-4 text-center border border-indigo-500/20 flex flex-col items-center">
-          <RefreshCw className="w-10 h-10 text-indigo-400 animate-spin mb-4" />
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans bg-beige-50">
+        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-beige-200/40 blur-[120px]" />
+        <div className="absolute -bottom-[10%] right-[10%] w-[40%] h-[40%] rounded-full bg-beige-300/30 blur-[120px]" />
+        <div className="glass-panel rounded-3xl p-8 max-w-sm w-full mx-4 text-center border border-beige-400/40 flex flex-col items-center">
+          <RefreshCw className="w-10 h-10 text-beige-900 animate-spin mb-4" />
           <h2 className="text-lg font-bold text-slate-900 dark:text-white font-heading">Verifying Session...</h2>
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">Checking secure connection with RECLAIM Extension...</p>
         </div>
@@ -100,22 +100,22 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans bg-beige-50 dark:bg-zinc-950">
       
       {/* Dynamic colorful blur blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-        <div className="absolute -top-[10%] -left-[10%] w-[45%] h-[45%] rounded-full bg-purple-400/30 blur-[130px] dark:bg-purple-900/10" />
-        <div className="absolute top-[20%] -right-[10%] w-[40%] h-[50%] rounded-full bg-cyan-400/30 blur-[130px] dark:bg-cyan-900/10" />
-        <div className="absolute -bottom-[10%] left-[20%] w-[50%] h-[50%] rounded-full bg-indigo-400/30 blur-[130px] dark:bg-indigo-900/10" />
+        <div className="absolute -top-[10%] -left-[10%] w-[45%] h-[45%] rounded-full bg-beige-200/40 blur-[130px] dark:bg-beige-900/5" />
+        <div className="absolute top-[20%] -right-[10%] w-[40%] h-[50%] rounded-full bg-beige-300/30 blur-[130px] dark:bg-beige-900/5" />
+        <div className="absolute -bottom-[10%] left-[20%] w-[50%] h-[50%] rounded-full bg-beige-100/40 blur-[130px] dark:bg-beige-900/5" />
       </div>
 
       <div className="w-full max-w-md mx-4 relative z-10">
         
         {/* Logo / Title Area */}
         <div className="flex flex-col items-center mb-6">
-          <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/25 border border-indigo-400/30 mb-3">
-            <Shield className="w-8 h-8 text-slate-950" />
-            <Sparkles className="w-4 h-4 text-cyan-300 absolute -top-1 -right-1 animate-pulse" />
+          <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-beige-900 via-beige-800 to-beige-700 shadow-lg shadow-beige-900/20 border border-beige-400/30 mb-3">
+            <Shield className="w-8 h-8 text-beige-50" />
+            <Sparkles className="w-4 h-4 text-beige-300 absolute -top-1 -right-1 animate-pulse" />
           </div>
           <h1 className="font-heading font-extrabold text-3xl text-slate-900 dark:text-white tracking-tight">
             Privacy<span className="gradient-text">Lens</span>
@@ -124,14 +124,14 @@ export const LoginPage = () => {
         </div>
 
         {/* Auth Card */}
-        <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-indigo-500/20 shadow-2xl">
+        <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-beige-400/45 dark:border-zinc-800 shadow-2xl">
           
           {/* Back button for forgot password mode */}
           {mode === 'forgot' && (
             <button
               type="button"
               onClick={() => setMode('signin')}
-              className="flex items-center space-x-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
+              className="flex items-center space-x-1.5 text-xs font-semibold text-beige-700 dark:text-beige-300 hover:text-beige-900 dark:hover:text-white transition-colors mb-4"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Sign In</span>
@@ -175,7 +175,7 @@ export const LoginPage = () => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-1 focus:ring-beige-900 focus:border-beige-900"
                     placeholder="Enter your full name"
                     required
                   />
@@ -194,7 +194,7 @@ export const LoginPage = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-1 focus:ring-beige-900 focus:border-beige-900"
                   placeholder="name@example.com"
                   required
                 />
@@ -210,7 +210,7 @@ export const LoginPage = () => {
                     <button
                       type="button"
                       onClick={() => setMode('forgot')}
-                      className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                      className="text-[10px] font-semibold text-beige-700 dark:text-beige-300 hover:text-beige-900 dark:hover:text-white transition-colors"
                     >
                       Forgot password?
                     </button>
@@ -224,14 +224,14 @@ export const LoginPage = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl glass-input text-xs font-medium focus:ring-1 focus:ring-beige-900 focus:border-beige-900"
                     placeholder="••••••••"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-indigo-400 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-beige-900 dark:hover:text-beige-300 transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -242,10 +242,10 @@ export const LoginPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-slate-900 font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-beige-900 hover:bg-beige-800 text-beige-50 font-bold text-xs shadow-md shadow-beige-900/10 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               {loading ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
+                <RefreshCw className="w-4 h-4 animate-spin text-beige-50" />
               ) : (
                 <span>
                   {mode === 'signin' ? 'Access Dashboard' : mode === 'signup' ? 'Create Account' : 'Reset Password'}
@@ -260,14 +260,14 @@ export const LoginPage = () => {
               <button
                 type="button"
                 onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-                className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
+                className="text-xs font-semibold text-beige-700 dark:text-beige-300 hover:text-beige-900 dark:hover:text-white transition-colors"
               >
                 {mode === 'signup' ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </button>
             </div>
           )}
 
-          <div className="mt-6 pt-5 border-t border-slate-200/50 dark:border-slate-800 text-center">
+          <div className="mt-6 pt-5 border-t border-slate-200/50 dark:border-zinc-800 text-center">
             <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
               🔒 <strong>Privacy First:</strong> Your credentials are verified against the local SQLite database. We do not store or transmit plain passwords.
             </p>

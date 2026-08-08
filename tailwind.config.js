@@ -12,12 +12,24 @@ export default {
         privacy: {
           dark: '#F8FAFC',
           card: '#FFFFFF',
-          border: '#E2E8F0',
-          accent: '#6366F1',
+          border: '#e5e0d3',
+          accent: '#8a7a5c', // Beige primary accent
           emerald: '#10B981',
           amber: '#F59E0B',
           rose: '#EF4444',
           cyan: '#06B6D4'
+        },
+        beige: {
+          50: '#F7F5EF',
+          100: '#EFE8DA',
+          200: '#E4DCC5',
+          300: '#F0E4C6',
+          400: '#e5e0d3',
+          500: '#9a9890',
+          600: '#7a5f1f',
+          700: '#6b5b3a',
+          800: '#6b6a64',
+          900: '#8a7a5c'
         }
       },
       fontFamily: {
@@ -29,8 +41,8 @@ export default {
       },
       keyframes: {
         glow: {
-          '0%': { boxShadow: '0 0 15px rgba(99, 102, 241, 0.2)' },
-          '100%': { boxShadow: '0 0 30px rgba(99, 102, 241, 0.6)' },
+          '0%': { boxShadow: '0 0 15px rgba(138, 122, 92, 0.2)' },
+          '100%': { boxShadow: '0 0 30px rgba(138, 122, 92, 0.6)' },
         }
       }
     },
