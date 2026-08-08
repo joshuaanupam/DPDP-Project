@@ -1,4 +1,5 @@
 // popup.js - RECLAIM Extension Popup UI Controller
+// Manages: Active Tab Synchronization, State Machine (loading, detected, analyzing, success, unsupported-page, error), Exposure Overview, and Recent Activity Queue
 
 const MAX_RECENT_VISITS_DISPLAY = 5;
 
@@ -6,26 +7,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   await refreshUI();
 
-  // Listen for real-time storage updates (instantly updates open popup when user navigates or submits)
+  // Listen for real-time storage updates
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode)) {
       refreshUI();
     }
   });
 
-  // Also listen for runtime message updates
+  // Listen for runtime message updates
   chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'DATA_UPDATED' || message.type === 'EVENTS_UPDATED') {
       refreshUI();
     }
   });
+
+  // Listen for active tab switching while popup is open
+  if (chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(() => {
+      refreshUI();
+    });
+  }
+
+  // Listen for tab navigation/refresh while popup is open
+  if (chrome.tabs && chrome.tabs.onUpdated) {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' && tab.active) {
+        refreshUI();
+      }
+    });
+  }
 });
 
 function setupEventListeners() {
   const btnDashboard = document.getElementById('btn-open-dashboard');
   if (btnDashboard) {
     btnDashboard.addEventListener('click', () => {
-      alert('Privacy Dashboard is currently under development by team member and will be integrated soon!');
+      chrome.tabs.create({ url: 'http://localhost:5173' });
+    });
+  }
+
+  const toggleChildSafe = document.getElementById('toggle-child-safe');
+  if (toggleChildSafe) {
+    toggleChildSafe.addEventListener('change', async (e) => {
+      const enabled = e.target.checked;
+      await chrome.storage.local.set({ childSafeMode: enabled });
+      chrome.runtime.sendMessage({ type: 'TOGGLE_CHILD_SAFE_MODE', enableChildSafeMode: enabled }).catch(() => {});
+      refreshUI();
     });
   }
 }
@@ -40,6 +67,19 @@ function normalizeDomain(hostname) {
     domain = domain.substring(4);
   }
   return domain;
+}
+
+/**
+ * Checks if a URL is an internal browser/extension page
+ */
+function isInternalUrl(urlOrDomain) {
+  if (!urlOrDomain) return true;
+  const lower = urlOrDomain.toLowerCase().trim();
+  const internalPrefixes = [
+    'chrome://', 'chrome-extension://', 'edge://', 'about:',
+    'devtools://', 'file://', 'blob:', 'data:', 'view-source:'
+  ];
+  return internalPrefixes.some(prefix => lower.startsWith(prefix)) || lower === 'unknown' || lower === 'newtab';
 }
 
 /**
@@ -65,13 +105,20 @@ function calculatePrivacyScore(exposuresObj) {
 }
 
 /**
- * Main UI refresh loop
+ * Main UI refresh loop - Single Source of Truth from active browser tab
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode']);
+  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode']);
   const allExposures = storage.exposures || {};
   let visits = storage.recentWebsiteVisits || [];
   const isDemo = storage.demoMode || false;
+  const isChildSafe = storage.childSafeMode || false;
+
+  // Update Child Safe Mode toggle UI
+  const toggleChildSafe = document.getElementById('toggle-child-safe');
+  if (toggleChildSafe) {
+    toggleChildSafe.checked = isChildSafe;
+  }
 
   // Filter exposure records and visits based on Demo Mode isolation
   const activeExposures = {};
@@ -86,22 +133,68 @@ async function refreshUI() {
     visits = visits.filter(v => !v.isDemo);
   }
 
-  // 1. Fetch current active tab domain
-  let currentDomain = '';
+  // Active Tab State Machine
+  let activeTabState = {
+    status: 'loading', // loading | detected | analyzing | success | unsupported-page | error
+    domain: '',
+    title: '',
+    url: '',
+    protocol: ''
+  };
+
+  let activeTabId = null;
+
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab && activeTab.url) {
+    
+    if (!activeTab || !activeTab.url) {
+      activeTabState.status = 'error';
+    } else if (isInternalUrl(activeTab.url)) {
+      activeTabState.status = 'unsupported-page';
+      activeTabState.url = activeTab.url;
+      activeTabState.title = activeTab.title || 'Browser Internal Page';
+    } else {
+      activeTabId = activeTab.id;
       const urlObj = new URL(activeTab.url);
-      if (urlObj.protocol.startsWith('http')) {
-        currentDomain = normalizeDomain(urlObj.hostname);
-      }
+      activeTabState.status = 'success';
+      activeTabState.domain = normalizeDomain(urlObj.hostname);
+      activeTabState.url = activeTab.url;
+      activeTabState.title = activeTab.title || urlObj.hostname;
+      activeTabState.protocol = urlObj.protocol.replace(':', '').toUpperCase();
     }
   } catch (e) {
-    console.error('Failed to parse current tab URL:', e);
+    activeTabState.status = 'error';
   }
 
-  // Render Current Site Section (uses activeExposures)
-  renderCurrentSite(currentDomain, activeExposures[currentDomain]);
+  // Check webpage for indicators of behavioral tracking or targeted ads (§9)
+  let hasBehavioralTracking = false;
+
+  const currentExposure = activeExposures[activeTabState.domain];
+  if (currentExposure) {
+    // Check if recorded consent types include marketing/promotional or if risk reasons indicate tracking
+    if ((currentExposure.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
+      hasBehavioralTracking = true;
+    }
+    if ((currentExposure.riskReasons || []).some(r => r.toLowerCase().includes('marketing') || r.toLowerCase().includes('tracking'))) {
+      hasBehavioralTracking = true;
+    }
+  }
+
+  // Send query message to content script on active tab for real-time DOM script/ad-tech parsing
+  if (activeTabId && activeTabState.status === 'success') {
+    try {
+      const trackingRes = await chrome.tabs.sendMessage(activeTabId, { type: 'CHECK_BEHAVIORAL_TRACKING' }).catch(() => null);
+      if (trackingRes && trackingRes.hasBehavioralTracking) {
+        hasBehavioralTracking = true;
+      }
+    } catch (err) {}
+  }
+
+  // Render Current Active Site Card
+  renderCurrentSite(activeTabState, currentExposure);
+
+  // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
+  renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
 
   // Render Overall Overview Metrics & Privacy Score
   renderExposureOverview(activeExposures);
@@ -111,17 +204,65 @@ async function refreshUI() {
 }
 
 /**
- * Renders the active site card
+ * Renders Child Safe Mode Alert (§9) if active user is flagged as a child / child safe mode is active
  */
-function renderCurrentSite(domain, siteExposure) {
+function renderChildSafeAlert(isChildSafe, hasBehavioralTracking) {
+  const alertContainer = document.getElementById('child-safe-alert-container');
+  if (!alertContainer) return;
+
+  if (isChildSafe && hasBehavioralTracking) {
+    alertContainer.innerHTML = `
+      <div class="alert-chip-child" id="child-safe-warning-alert">
+        ⚠️ WARNING: Children's Behavioral Tracking Detected (§9)
+      </div>
+    `;
+  } else {
+    alertContainer.innerHTML = '';
+  }
+}
+
+/**
+ * Renders the active site card with full state management
+ */
+function renderCurrentSite(activeTabState, siteExposure) {
   const domainEl = document.getElementById('current-domain');
   const statusEl = document.getElementById('exposure-status');
   const riskPill = document.getElementById('site-risk-pill');
   const badgesContainer = document.getElementById('detected-badges');
 
-  domainEl.textContent = domain || 'Internal / Special Page';
+  if (activeTabState.status === 'loading') {
+    domainEl.textContent = 'Detecting website...';
+    statusEl.innerHTML = '🔄 <span style="color: #64748b;">Analyzing active browser tab...</span>';
+    riskPill.className = 'risk-pill risk-low';
+    riskPill.textContent = 'LOADING';
+    badgesContainer.innerHTML = '<span class="chip">Checking...</span>';
+    return;
+  }
 
-  if (!domain || !siteExposure) {
+  if (activeTabState.status === 'unsupported-page') {
+    domainEl.textContent = 'Internal / Special Page';
+    statusEl.innerHTML = 'ℹ️ <span style="color: #64748b;">This page cannot be analyzed by the extension.</span>';
+    riskPill.className = 'risk-pill risk-low';
+    riskPill.textContent = 'UNSUPPORTED';
+    badgesContainer.innerHTML = '<span class="chip">Internal Page</span>';
+    return;
+  }
+
+  if (activeTabState.status === 'error') {
+    domainEl.textContent = 'Unknown Page';
+    statusEl.innerHTML = '⚠️ <span style="color: #ef4444;">Unable to retrieve website information. Try again.</span>';
+    riskPill.className = 'risk-pill risk-high';
+    riskPill.textContent = 'ERROR';
+    badgesContainer.innerHTML = '<span class="chip">Error</span>';
+    return;
+  }
+
+  // Active website detected successfully
+  const domain = activeTabState.domain;
+  const protocolBadge = activeTabState.protocol === 'HTTPS' ? '🔒 HTTPS' : '⚠️ HTTP';
+  domainEl.innerHTML = `${domain} <span style="font-size: 11px; font-weight: normal; color: #64748b; margin-left: 6px;">(${protocolBadge})</span>`;
+
+  if (!siteExposure) {
     statusEl.innerHTML = '⚡ <span style="color: #64748b;">No exposure recorded on this domain yet.</span>';
     riskPill.className = 'risk-pill risk-low';
     riskPill.textContent = 'CLEAN';

@@ -74,6 +74,9 @@ app.post('/api/demo/reset', async (req, res) => {
   }
 });
 
+// AI Policy Summarizer
+app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled API Error:', err.stack);

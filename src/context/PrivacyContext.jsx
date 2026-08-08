@@ -5,9 +5,10 @@ const PrivacyContext = createContext();
 
 export const PrivacyProvider = ({ children }) => {
   const [userData, setUserData] = useState(initialData.user);
-  const [websites, setWebsites] = useState(initialData.websites);
-  const [requests, setRequests] = useState(initialData.requests);
-  const [auditLogs, setAuditLogs] = useState(initialData.auditLogs);
+  const [websites, setWebsites] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [backendActive, setBackendActive] = useState(false);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,10 +20,68 @@ export const PrivacyProvider = ({ children }) => {
   const [activeModal, setActiveModal] = useState(null); // 'DETAIL', 'TIER1', 'TIER2', 'TIER3'
   const [actionTargetConsent, setActionTargetConsent] = useState(null);
 
-  // Recalculate dynamic privacy score
+  // Fetch Dashboard Data from Backend
+  const fetchDashboardData = async (userId = 'usr_12345') => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/dashboard/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserData(data.user);
+        setWebsites(data.websites);
+        setBackendActive(true);
+      } else {
+        // Fallback to mock data if 404/500
+        setWebsites(initialData.websites);
+      }
+    } catch (err) {
+      console.warn("Backend API offline. Using mock dashboard data.");
+      setWebsites(initialData.websites);
+    }
+  };
+
+  // Fetch Privacy Requests
+  const fetchRequests = async (userId = 'usr_12345') => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/requests/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRequests(data.requests);
+      } else {
+        setRequests(initialData.requests);
+      }
+    } catch (err) {
+      setRequests(initialData.requests);
+    }
+  };
+
+  // Fetch Audit Logs
+  const fetchAuditLogs = async (userId = 'usr_12345') => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/audit/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data.auditLogs);
+      } else {
+        setAuditLogs(initialData.auditLogs);
+      }
+    } catch (err) {
+      setAuditLogs(initialData.auditLogs);
+    }
+  };
+
+  // Load live data from backend on mount
+  React.useEffect(() => {
+    fetchDashboardData();
+    fetchRequests();
+    fetchAuditLogs();
+  }, []);
+
+  // Recalculate dynamic privacy score (local state calculation or fallback)
   const privacyScore = useMemo(() => {
+    if (backendActive) {
+      return userData.privacyScore || 100;
+    }
     let score = 100;
-    
     websites.forEach(site => {
       if (site.riskLevel === 'High') score -= 10;
       if (site.riskLevel === 'Medium') score -= 5;
@@ -41,9 +100,8 @@ export const PrivacyProvider = ({ children }) => {
         }
       });
     });
-
     return Math.min(100, Math.max(10, score));
-  }, [websites]);
+  }, [websites, userData, backendActive]);
 
   // Overall Stats
   const stats = useMemo(() => {
@@ -98,8 +156,8 @@ export const PrivacyProvider = ({ children }) => {
   };
 
   // Action: Execute Tier 1 Revocation
-  const executeTier1Revoke = (websiteId, consentType) => {
-    // 1. Update consent status in website
+  const executeTier1Revoke = async (websiteId, consentType) => {
+    // Local Optimistic UI State update
     setWebsites(prev => prev.map(site => {
       if (site.id === websiteId) {
         return {
@@ -115,37 +173,62 @@ export const PrivacyProvider = ({ children }) => {
       return site;
     }));
 
-    const targetSite = websites.find(w => w.id === websiteId);
-    const newReqId = `req_${Date.now()}`;
-    const newRefId = `PL-REV-${Math.floor(100000 + Math.random() * 900000)}`;
+    try {
+      // Post request to backend API
+      const response = await fetch('http://localhost:5000/api/requests/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: 'usr_12345',
+          websiteId,
+          requestType: 'CONSENT_REVOCATION',
+          targetConsent: consentType,
+          tier: 1,
+          methodUsed: 'TIER1_DIRECT_API'
+        })
+      });
 
-    // 2. Add to Request Tracker
-    const newRequest = {
-      id: newReqId,
-      siteId: websiteId,
-      siteName: targetSite?.name || 'Website',
-      domain: targetSite?.domain || '',
-      requestType: 'CONSENT_REVOCATION',
-      targetConsent: consentType,
-      tier: 1,
-      methodUsed: 'TIER1_DIRECT_API',
-      status: 'COMPLETED',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      referenceId: newRefId
-    };
-    setRequests(prev => [newRequest, ...prev]);
+      if (response.ok) {
+        // Re-sync with backend database
+        await fetchDashboardData();
+        await fetchRequests();
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.warn("Backend offline. Simulating request tracking locally.");
+      
+      const targetSite = websites.find(w => w.id === websiteId);
+      const newReqId = `req_${Date.now()}`;
+      const newRefId = `PL-REV-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // 3. Add to Audit Log
-    const newAudit = {
-      id: `aud_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      siteName: targetSite?.name || 'Website',
-      action: 'CONSENT_REVOCATION',
-      description: `Revoked "${consentType}" consent via Tier 1 Direct API execution.`,
-      dpdpProof: 'DPDP §6(4) Immediate Revocation Executed'
-    };
-    setAuditLogs(prev => [newAudit, ...prev]);
+      // Add to Request Tracker
+      const newRequest = {
+        id: newReqId,
+        siteId: websiteId,
+        siteName: targetSite?.name || 'Website',
+        domain: targetSite?.domain || '',
+        requestType: 'CONSENT_REVOCATION',
+        targetConsent: consentType,
+        tier: 1,
+        methodUsed: 'TIER1_DIRECT_API',
+        status: 'COMPLETED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        referenceId: newRefId
+      };
+      setRequests(prev => [newRequest, ...prev]);
+
+      // Add to Audit Log
+      const newAudit = {
+        id: `aud_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        siteName: targetSite?.name || 'Website',
+        action: 'CONSENT_REVOCATION',
+        description: `Revoked "${consentType}" consent via Tier 1 Direct API execution.`,
+        dpdpProof: 'DPDP §6(4) Immediate Revocation Executed'
+      };
+      setAuditLogs(prev => [newAudit, ...prev]);
+    }
   };
 
   // Action: Trigger Tier 2 Guided URL
@@ -155,36 +238,59 @@ export const PrivacyProvider = ({ children }) => {
   };
 
   // Action: Confirm Tier 2 Action Initiated
-  const executeTier2Initiate = (websiteId) => {
-    const targetSite = websites.find(w => w.id === websiteId);
-    const newReqId = `req_${Date.now()}`;
-    const newRefId = `PL-GUIDE-${Math.floor(100000 + Math.random() * 900000)}`;
+  const executeTier2Initiate = async (websiteId) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/requests/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: 'usr_12345',
+          websiteId,
+          requestType: 'ACCOUNT_DELETION',
+          targetConsent: 'Account & Data Removal',
+          tier: 2,
+          methodUsed: 'TIER2_GUIDED'
+        })
+      });
 
-    const newRequest = {
-      id: newReqId,
-      siteId: websiteId,
-      siteName: targetSite?.name || 'Website',
-      domain: targetSite?.domain || '',
-      requestType: 'ACCOUNT_DELETION',
-      targetConsent: 'Account & Data Removal',
-      tier: 2,
-      methodUsed: 'TIER2_GUIDED_URL',
-      status: 'SUBMITTED',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      referenceId: newRefId
-    };
-    setRequests(prev => [newRequest, ...prev]);
+      if (response.ok) {
+        await fetchDashboardData();
+        await fetchRequests();
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.warn("Backend offline. Logging guided initiation locally.");
 
-    const newAudit = {
-      id: `aud_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      siteName: targetSite?.name || 'Website',
-      action: 'DELETION_REQUESTED',
-      description: `Opened Tier 2 Guided Deletion portal and logged user initiation.`,
-      dpdpProof: 'DPDP §12 Self-Serve Request Initiated'
-    };
-    setAuditLogs(prev => [newAudit, ...prev]);
+      const targetSite = websites.find(w => w.id === websiteId);
+      const newReqId = `req_${Date.now()}`;
+      const newRefId = `PL-GUIDE-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      const newRequest = {
+        id: newReqId,
+        siteId: websiteId,
+        siteName: targetSite?.name || 'Website',
+        domain: targetSite?.domain || '',
+        requestType: 'ACCOUNT_DELETION',
+        targetConsent: 'Account & Data Removal',
+        tier: 2,
+        methodUsed: 'TIER2_GUIDED_URL',
+        status: 'SUBMITTED',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        referenceId: newRefId
+      };
+      setRequests(prev => [newRequest, ...prev]);
+
+      const newAudit = {
+        id: `aud_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        siteName: targetSite?.name || 'Website',
+        action: 'DELETION_REQUESTED',
+        description: `Opened Tier 2 Guided Deletion portal and logged user initiation.`,
+        dpdpProof: 'DPDP §12 Self-Serve Request Initiated'
+      };
+      setAuditLogs(prev => [newAudit, ...prev]);
+    }
 
     closeModal();
   };
@@ -197,39 +303,90 @@ export const PrivacyProvider = ({ children }) => {
   };
 
   // Action: Submit Tier 3 DPDP Notice
-  const executeTier3Submit = (websiteId, requestType, letterText) => {
-    const targetSite = websites.find(w => w.id === websiteId);
-    const newReqId = `req_${Date.now()}`;
-    const newRefId = `DPDP-NOTICE-2026-${Math.floor(100 + Math.random() * 900)}`;
+  const executeTier3Submit = async (websiteId, requestType, letterText) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/requests/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: 'usr_12345',
+          websiteId,
+          requestType,
+          tier: 3,
+          methodUsed: 'TIER3_GENERATED_NOTICE',
+          requestText: letterText
+        })
+      });
 
-    const newRequest = {
-      id: newReqId,
-      siteId: websiteId,
-      siteName: targetSite?.name || 'Website',
-      domain: targetSite?.domain || '',
-      requestType: requestType,
-      targetConsent: requestType === 'DATA_ERASURE' ? 'Complete Data Erasure (§12)' : 'Consent Withdrawal (§6)',
-      tier: 3,
-      methodUsed: 'TIER3_GENERATED_NOTICE',
-      status: 'SUBMITTED',
-      requestText: letterText,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      referenceId: newRefId
-    };
-    setRequests(prev => [newRequest, ...prev]);
+      if (response.ok) {
+        await fetchDashboardData();
+        await fetchRequests();
+        await fetchAuditLogs();
+      }
+    } catch (err) {
+      console.warn("Backend offline. Logging notice notice locally.");
 
-    const newAudit = {
-      id: `aud_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      siteName: targetSite?.name || 'Website',
-      action: 'DELETION_REQUESTED',
-      description: `Generated and dispatched formal DPDP Act Notice (${requestType}). Ref: ${newRefId}`,
-      dpdpProof: 'DPDP Statutory Notice Dispatched'
-    };
-    setAuditLogs(prev => [newAudit, ...prev]);
+      const targetSite = websites.find(w => w.id === websiteId);
+      const newReqId = `req_${Date.now()}`;
+      const newRefId = `DPDP-NOTICE-2026-${Math.floor(100 + Math.random() * 900)}`;
+
+      const newRequest = {
+        id: newReqId,
+        siteId: websiteId,
+        siteName: targetSite?.name || 'Website',
+        domain: targetSite?.domain || '',
+        requestType: requestType,
+        targetConsent: requestType === 'DATA_ERASURE' ? 'Complete Data Erasure (§12)' : 'Consent Withdrawal (§6)',
+        tier: 3,
+        methodUsed: 'TIER3_GENERATED_NOTICE',
+        status: 'SUBMITTED',
+        requestText: letterText,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        referenceId: newRefId
+      };
+      setRequests(prev => [newRequest, ...prev]);
+
+      const newAudit = {
+        id: `aud_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        siteName: targetSite?.name || 'Website',
+        action: 'DELETION_REQUESTED',
+        description: `Generated and dispatched formal DPDP Act Notice (${requestType}). Ref: ${newRefId}`,
+        dpdpProof: 'DPDP Statutory Notice Dispatched'
+      };
+      setAuditLogs(prev => [newAudit, ...prev]);
+    }
 
     closeModal();
+  };
+
+  // Action: Reset Dashboard
+  const resetDashboard = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/demo/reset', {
+        method: 'POST'
+      });
+      if (response.ok) {
+        await fetchDashboardData();
+        await fetchRequests();
+        await fetchAuditLogs();
+        return true;
+      }
+    } catch (err) {
+      console.warn("Backend offline. Fallback to mock reset.");
+    }
+    // Fallback to resetting state to empty/initial mock data locally
+    setWebsites([]);
+    setRequests([]);
+    setAuditLogs([]);
+    setUserData({
+      id: 'usr_12345',
+      name: 'Joshua',
+      email: 'joshua@example.com',
+      privacyScore: 100
+    });
+    return false;
   };
 
   return (
@@ -257,7 +414,8 @@ export const PrivacyProvider = ({ children }) => {
         triggerTier2Guided,
         executeTier2Initiate,
         triggerTier3Letter,
-        executeTier3Submit
+        executeTier3Submit,
+        resetDashboard
       }}
     >
       {children}

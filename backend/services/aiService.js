@@ -1,7 +1,7 @@
 /**
  * @file aiService.js
  * @description PrivacyLens AI Intelligence Service powered by Google Gemini API
- * with a deterministic rule-based fallback engine for DPDP Act privacy policy summarization.
+ * with multi-language support (Hindi/Telugu) and deterministic rule-based fallbacks.
  * Owned by: TM1 (Project Lead & AI Intelligence Engineer)
  */
 
@@ -11,13 +11,45 @@ const https = require('https');
 const DEFAULT_TIMEOUT_MS = 6000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
+// Pre-translated standard fallbacks for Hindi (§5(3) + §6(3) support)
+const HINDI_FALLBACKS = {
+  highRisk: {
+    bullet1: "यह वेबसाइट आपकी व्यक्तिगत संपर्क जानकारी, स्थान और वित्तीय विवरण एकत्र करती है और इसे तीसरे पक्ष के विज्ञापनदाताओं के साथ साझा करती है।",
+    bullet2: "डेटा को अनिश्चित काल तक बनाए रखा जाता है; आप किसी भी समय सहमति वापस लेने या डेटा हटाने (Erasure) के लिए अनुरोध कर सकते हैं।"
+  },
+  medRisk: {
+    bullet1: "यह वेबसाइट सेवा वितरण को अनुकूलित करने के लिए आपके खाते की साख और उपयोग विश्लेषण विवरणों को ट्रैक करती है।",
+    bullet2: "आप कानून के तहत किसी भी समय अपनी सहमति वापस ले सकते हैं या डेटा हटाने का अनुरोध कर सकते हैं।"
+  },
+  lowRisk: {
+    bullet1: "यह वेबसाइट केवल सेवा वितरण के लिए आवश्यक न्यूनतम व्यक्तिगत क्रेडेंशियल एकत्र करती है।",
+    bullet2: "डीपीडीपी अधिनियम (DPDP Act) के तहत सहमति वापस लेने और रिकॉर्ड हटाने के अधिकार सुरक्षित हैं।"
+  }
+};
+
+// Pre-translated standard fallbacks for Telugu (§5(3) + §6(3) support)
+const TELUGU_FALLBACKS = {
+  highRisk: {
+    bullet1: "ఈ వెబ్‌సైట్ మీ వ్యక్తిగత సంప్రదింపు సమాచారం, స్థానం మరియు ఆర్థిక వివరాలను సేకరిస్తుంది మరియు దీనిని మూడవ పక్ష ప్రకటనదారులతో భాగస్వామ్యం చేస్తుంది.",
+    bullet2: "డేటా నిరవధికంగా నిలుపుకోబడుతుంది; మీరు ఏ సమయంలోనైనా సమ్మతిని ఉపసంహరించుకోవచ్చు లేదా డేటా తొలగింపును అభ్యర్థించవచ్చు."
+  },
+  medRisk: {
+    bullet1: "ఈ వెబ్‌సైట్ సేవా పంపిణీని మెరుగుపరచడానికి మీ ఖాతా ఆధారాలను మరియు వినియోగ విశ్లేషణల వివరాలను ట్రాక్ చేస్తుంది.",
+    bullet2: "మీరు చట్టం ప్రకారం ఏ సమయంలోనైనా మీ సమ్మతిని ఉపసంహరించుకోవచ్చు లేదా డేటా తొలగింపును అభ్యర్థించవచ్చు."
+  },
+  lowRisk: {
+    bullet1: "ఈ వెబ్‌సైట్ సేవా పంపిణీకి అవసరమైన కనీస వ్యక్తిగత ఆధారాలను మాత్రమే సేకరిస్తుంది.",
+    bullet2: "డిపిడిపి చట్టం (DPDP Act) కింద సమ్మతిని ఉపసంహరించుకునే మరియు రికార్డులను తొలగించే హక్కులు సురక్షితం."
+  }
+};
+
 /**
- * Summarizes complex legal privacy policy text into 2 crisp, plain-English bullet points.
+ * Summarizes complex legal privacy policy text into 2 crisp, plain-English/Hindi/Telugu bullet points.
  * Automatically fails over to the intelligent rule-based analyzer if API key is missing or request times out.
  * 
  * @param {string} policyText - Raw legal terms or privacy policy content
  * @param {string} [siteName='Website'] - Name of the website/service
- * @param {object} [options={}] - Custom options (timeout, apiKey, etc.)
+ * @param {object} [options={}] - Custom options (timeout, apiKey, language, etc.)
  * @returns {Promise<{
  *   success: boolean,
  *   summary: string,
@@ -31,15 +63,21 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 async function summarizePrivacyPolicy(policyText, siteName = 'Website', options = {}) {
   const cleanText = (policyText || '').trim();
   const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
+  const language = (options.language || 'EN').toUpperCase(); // EN, HI, TE
 
   if (!cleanText) {
     return {
       success: true,
-      summary: `• ${siteName} collects standard account details for service delivery.\n• Users may exercise consent revocation under DPDP Act 2023.`,
-      bullets: [
-        `${siteName} collects standard account details for service delivery.`,
-        `Users may exercise consent revocation under DPDP Act 2023.`
-      ],
+      summary: language === 'HI'
+        ? `• ${siteName} सेवा वितरण के लिए मानक खाता विवरण एकत्र करता है।\n• उपयोगकर्ता डीपीडीपी अधिनियम 2023 के तहत सहमति वापस ले सकते हैं।`
+        : language === 'TE'
+        ? `• ${siteName} సేవా పంపిణీ కోసం ప్రామాణిక ఖాతా వివరాలను సేకరిస్తుంది.\n• వినియోగదారులు డిపిడిపి చట్టం 2023 కింద సమ్మతిని ఉపసంహరించుకోవచ్చు.`
+        : `• ${siteName} collects standard account details for service delivery.\n• Users may exercise consent revocation under DPDP Act 2023.`,
+      bullets: language === 'HI'
+        ? [`${siteName} सेवा वितरण के लिए मानक खाता विवरण एकत्र करता है।`, `उपयोगकर्ता डीपीडीपी अधिनियम 2023 के तहत सहमति वापस ले सकते हैं।`]
+        : language === 'TE'
+        ? [`${siteName} సేవా పంపిణీ కోసం ప్రామాణిక ఖాతా వివరాలను సేకరిస్తుంది.`, `వినియోగదారులు డిపిడిపి చట్టం 2023 కింద సమ్మతిని ఉపసంహరించుకోవచ్చు.`]
+        : [`${siteName} collects standard account details for service delivery.`, `Users may exercise consent revocation under DPDP Act 2023.`],
       riskLevel: 'Low',
       keyTakeaways: ['Standard Account Data', 'DPDP Protected'],
       isFallback: true,
@@ -50,7 +88,7 @@ async function summarizePrivacyPolicy(policyText, siteName = 'Website', options 
   // Attempt Gemini API call if API key is available
   if (apiKey) {
     try {
-      const geminiResult = await callGeminiAPI(cleanText, siteName, apiKey, options.timeout || DEFAULT_TIMEOUT_MS);
+      const geminiResult = await callGeminiAPI(cleanText, siteName, apiKey, options.timeout || DEFAULT_TIMEOUT_MS, language);
       if (geminiResult && geminiResult.bullets && geminiResult.bullets.length >= 2) {
         return {
           success: true,
@@ -68,17 +106,21 @@ async function summarizePrivacyPolicy(policyText, siteName = 'Website', options 
   }
 
   // Robust Rule-Based Fallback Engine
-  return generateRuleBasedSummary(cleanText, siteName);
+  return generateRuleBasedSummary(cleanText, siteName, language);
 }
 
 /**
  * Calls the Google Gemini API with strict temperature and timeout.
  */
-async function callGeminiAPI(policyText, siteName, apiKey, timeoutMs) {
+async function callGeminiAPI(policyText, siteName, apiKey, timeoutMs, language = 'EN') {
+  let langInstruction = "English.";
+  if (language === 'HI') langInstruction = "Hindi (हिंदी). Provide the responses in Hindi language script.";
+  if (language === 'TE') langInstruction = "Telugu (తెలుగు). Provide the responses in Telugu language script.";
+
   const prompt = `You are PrivacyLens AI, an expert privacy analyst under India's Digital Personal Data Protection (DPDP) Act 2023.
 Analyze the following privacy policy excerpt for the website "${siteName}".
 
-Provide EXACTLY TWO plain-English bullet points (max 2 sentences total, no legal jargon):
+Provide EXACTLY TWO plain-language sentences in ${langInstruction} (max 2 sentences total, no complex legal jargon):
 1. Bullet 1: What personal data is collected and whether it is shared with third parties or advertisers.
 2. Bullet 2: How long data is retained and how the user can exercise DPDP rights (revocation or erasure).
 
@@ -86,8 +128,8 @@ Also assign a risk level: "Low", "Medium", or "High".
 Return your response in STRICT JSON format:
 {
   "bullets": [
-    "Sentence 1 describing data collected and third-party sharing.",
-    "Sentence 2 describing retention and DPDP consent revocation/erasure rights."
+    "Sentence 1 in requested language describing data collected and third-party sharing.",
+    "Sentence 2 in requested language describing retention and DPDP consent revocation/erasure rights."
   ],
   "riskLevel": "Low" | "Medium" | "High",
   "keyTakeaways": ["Short Tag 1", "Short Tag 2"]
@@ -108,7 +150,7 @@ ${policyText.slice(0, 4000)}
     ],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: 256,
+      maxOutputTokens: 384,
       responseMimeType: "application/json"
     }
   });
@@ -157,10 +199,9 @@ ${policyText.slice(0, 4000)}
 }
 
 /**
- * Intelligent Rule-Based Fallback Policy Analyzer
- * Uses heuristic keyword parsing and semantic signals to produce accurate summaries.
+ * Intelligent Rule-Based Fallback Policy Analyzer with multilingual fallbacks (§5(3) + §6(3) support).
  */
-function generateRuleBasedSummary(text, siteName) {
+function generateRuleBasedSummary(text, siteName, language = 'EN') {
   const lower = text.toLowerCase();
 
   // Pattern detection
@@ -183,33 +224,44 @@ function generateRuleBasedSummary(text, siteName) {
   if (riskScore >= 4) riskLevel = 'High';
   else if (riskScore >= 2) riskLevel = 'Medium';
 
-  // Construct Bullet 1 (Data Collection & Sharing)
+  // Output generation based on selected language
   let bullet1 = '';
-  if (hasThirdPartyAds && hasPhoneEmail) {
-    bullet1 = `${siteName} collects your contact details and shares behavioral data with 3rd-party advertising networks.`;
-  } else if (hasThirdPartyAds) {
-    bullet1 = `${siteName} shares analytical and browsing data with marketing partners for targeted promotions.`;
-  } else if (hasTracking) {
-    bullet1 = `${siteName} tracks device analytics and user activity to optimize internal platform performance.`;
-  } else {
-    bullet1 = `${siteName} collects basic account credentials and profile metadata strictly for account management.`;
-  }
-
-  // Construct Bullet 2 (Retention & DPDP Rights)
   let bullet2 = '';
-  if (hasExplicitOptOut) {
-    bullet2 = `Data is retained during active usage; users can exercise Section 6 Consent Revocation and Section 12 Erasure anytime.`;
-  } else if (hasIndefiniteRetention) {
-    bullet2 = `Data is retained until explicit deletion; request DPDP Section 12 erasure to purge inactive records.`;
+
+  if (language === 'HI') {
+    const dictionary = HINDI_FALLBACKS[riskLevel.toLowerCase() + 'Risk'] || HINDI_FALLBACKS.medRisk;
+    bullet1 = dictionary.bullet1.replace('यह वेबसाइट', `${siteName}`);
+    bullet2 = dictionary.bullet2;
+  } else if (language === 'TE') {
+    const dictionary = TELUGU_FALLBACKS[riskLevel.toLowerCase() + 'Risk'] || TELUGU_FALLBACKS.medRisk;
+    bullet1 = dictionary.bullet1.replace('ఈ వెబ్‌సైట్', `${siteName}`);
+    bullet2 = dictionary.bullet2;
   } else {
-    bullet2 = `You retain the statutory right under India's DPDP Act to revoke marketing permissions and demand data deletion.`;
+    // English default
+    if (hasThirdPartyAds && hasPhoneEmail) {
+      bullet1 = `${siteName} collects your contact details and shares behavioral data with 3rd-party advertising networks.`;
+    } else if (hasThirdPartyAds) {
+      bullet1 = `${siteName} shares analytical and browsing data with marketing partners for targeted promotions.`;
+    } else if (hasTracking) {
+      bullet1 = `${siteName} tracks device analytics and user activity to optimize internal platform performance.`;
+    } else {
+      bullet1 = `${siteName} collects basic account credentials and profile metadata strictly for account management.`;
+    }
+
+    if (hasExplicitOptOut) {
+      bullet2 = `Data is retained during active usage; users can exercise Section 6 Consent Revocation and Section 12 Erasure anytime.`;
+    } else if (hasIndefiniteRetention) {
+      bullet2 = `Data is retained until explicit deletion; request DPDP Section 12 erasure to purge inactive records.`;
+    } else {
+      bullet2 = `You retain the statutory right under India's DPDP Act to revoke marketing permissions and demand data deletion.`;
+    }
   }
 
   const takeaways = [];
-  if (hasThirdPartyAds) takeaways.push('3rd-Party Ads');
-  if (hasTracking) takeaways.push('Activity Tracking');
-  if (hasSensitiveData) takeaways.push('Sensitive Data');
-  takeaways.push('DPDP §6/§12 Protected');
+  if (hasThirdPartyAds) takeaways.push(language === 'HI' ? 'विज्ञापनदाता साझाकरण' : language === 'TE' ? 'ప్రకటనకర్తల భాగస్వామ్యం' : '3rd-Party Ads');
+  if (hasTracking) takeaways.push(language === 'HI' ? 'गतिविधि ट्रैकिंग' : language === 'TE' ? 'యాక్టివిటీ ట్రాకింగ్' : 'Activity Tracking');
+  if (hasSensitiveData) takeaways.push(language === 'HI' ? 'संवेदनशील डेटा' : language === 'TE' ? 'సున్నితమైన డేటా' : 'Sensitive Data');
+  takeaways.push('DPDP §6/§12');
 
   return {
     success: true,

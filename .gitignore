@@ -1,7 +1,9 @@
 node_modules/
-*.db
-*.db-journal
-.env
-.DS_Store
 dist/
 build/
+.env
+.env.local
+.env*.local
+*.db
+*.db-journal
+.DS_Store

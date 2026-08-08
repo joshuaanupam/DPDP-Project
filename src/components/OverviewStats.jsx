@@ -22,17 +22,17 @@ export const OverviewStats = () => {
           <Globe className="w-20 h-20 text-indigo-400" />
         </div>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Connected Sites</span>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Connected Sites</span>
           <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
             <Globe className="w-5 h-5" />
           </div>
         </div>
         <div className="flex items-baseline space-x-2">
-          <span className="text-3xl font-extrabold text-white font-heading">{stats.totalWebsites}</span>
-          <span className="text-xs font-medium text-slate-400">tracked web services</span>
+          <span className="text-3xl font-extrabold text-slate-900 font-heading">{stats.totalWebsites}</span>
+          <span className="text-xs font-medium text-slate-600">tracked web services</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-          <span className="text-slate-400 flex items-center">
+        <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-xs">
+          <span className="text-slate-600 flex items-center">
             <Sparkles className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Passive MV3 Detection
           </span>
           <span className="text-indigo-400 font-semibold">100% Live</span>
@@ -45,17 +45,17 @@ export const OverviewStats = () => {
           <ShieldAlert className="w-20 h-20 text-amber-400" />
         </div>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Consents</span>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Active Consents</span>
           <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
             <ShieldAlert className="w-5 h-5" />
           </div>
         </div>
         <div className="flex items-baseline space-x-2">
-          <span className="text-3xl font-extrabold text-white font-heading">{stats.activeConsents}</span>
+          <span className="text-3xl font-extrabold text-slate-900 font-heading">{stats.activeConsents}</span>
           <span className="text-xs font-medium text-amber-400/90 font-medium">active permissions</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-          <span className="text-slate-400 flex items-center">
+        <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-xs">
+          <span className="text-slate-600 flex items-center">
             <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-400" /> Marketing & Ads
           </span>
           <span className="text-amber-400 font-semibold">Revokable</span>
@@ -68,17 +68,17 @@ export const OverviewStats = () => {
           <Clock className="w-20 h-20 text-cyan-400" />
         </div>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pending Requests</span>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Pending Requests</span>
           <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
             <Clock className="w-5 h-5" />
           </div>
         </div>
         <div className="flex items-baseline space-x-2">
-          <span className="text-3xl font-extrabold text-white font-heading">{stats.pendingRequests}</span>
+          <span className="text-3xl font-extrabold text-slate-900 font-heading">{stats.pendingRequests}</span>
           <span className="text-xs font-medium text-cyan-400">in-flight DPDP requests</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-          <span className="text-slate-400">Audit Proof Logging</span>
+        <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-xs">
+          <span className="text-slate-600">Audit Proof Logging</span>
           <span className="text-cyan-400 font-semibold flex items-center">
             Tracker Ready <ArrowUpRight className="w-3 h-3 ml-0.5" />
           </span>
@@ -88,7 +88,7 @@ export const OverviewStats = () => {
       {/* Stat 4: Digital Privacy Score Card */}
       <div className="glass-card p-5 rounded-2xl relative overflow-hidden group border-indigo-500/30">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Digital Privacy Score</span>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Digital Privacy Score</span>
           <div className="p-2.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400">
             <Shield className="w-5 h-5" />
           </div>
@@ -99,7 +99,7 @@ export const OverviewStats = () => {
               <span className={`text-4xl font-black font-heading ${scoreInfo.text}`}>{stats.privacyScore}</span>
               <span className="text-sm font-bold text-slate-500">/ 100</span>
             </div>
-            <p className="text-xs font-semibold text-slate-300 mt-1">{scoreInfo.label}</p>
+            <p className="text-xs font-semibold text-slate-700 mt-1">{scoreInfo.label}</p>
           </div>
           
           <div className="relative flex items-center justify-center">
@@ -120,8 +120,8 @@ export const OverviewStats = () => {
             <TrendingUp className={`w-4 h-4 absolute ${scoreInfo.text}`} />
           </div>
         </div>
-        <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-          <span className="text-slate-400 text-[11px]">Formula: DPDP Risk Matrix</span>
+        <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-xs">
+          <span className="text-slate-600 text-[11px]">Formula: DPDP Risk Matrix</span>
           <span className="text-indigo-300 text-[11px] font-medium">Auto-updated</span>
         </div>
       </div>
