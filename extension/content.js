@@ -823,6 +823,25 @@ try {
           <div id="child-safe-alert-container"></div>
         </div>
 
+        <!-- Unified Website Summary Card (RECLAIM In-Page Overlay & Extension - English Only) -->
+        <div class="card" id="website-brief-card" style="display: block;">
+          <div class="card-title">
+            <span>WEBSITE SUMMARY</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 10px; font-weight: 800; color: #2563eb; background: #e0f2fe; padding: 2px 6px; border-radius: 4px;">ENGLISH</span>
+              <span id="btn-refresh-brief" style="cursor: pointer; color: #2563eb; font-size: 10px; font-weight: 700; transition: color 0.2s;">[REFRESH]</span>
+            </div>
+          </div>
+          <div id="brief-content" style="font-size: 12px; line-height: 1.5; color: #0f172a;">
+            <div id="brief-site-name" style="font-weight: 700; font-size: 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <span id="brief-site-icon">🌐</span> <span id="brief-site-title">Detecting...</span>
+            </div>
+            <div id="brief-text" style="color: #64748b; font-size: 11.5px; white-space: pre-line; line-height: 1.4;">
+              Generating verified website summary...
+            </div>
+          </div>
+        </div>
+
         <!-- Digital Exposure Metrics -->
         <div class="card">
           <div class="card-title">Digital Exposure Overview</div>
@@ -1050,6 +1069,108 @@ try {
     });
   }
 
+  let _overlayActiveDomain = '';
+
+  /**
+   * Loads, caches, and renders the Unified Website Summary in the RECLAIM In-Page Overlay panel.
+   */
+  async function loadOverlayWebsiteBrief(shadow, activeTabState, forceRefresh = false) {
+    if (!shadow) return;
+    const card = shadow.getElementById('website-brief-card');
+    const siteTitle = shadow.getElementById('brief-site-title');
+    const textEl = shadow.getElementById('brief-text');
+
+    if (!card || !siteTitle || !textEl) return;
+
+    if (activeTabState.status !== 'success' || !activeTabState.domain) {
+      card.style.display = 'none';
+      _overlayActiveDomain = '';
+      return;
+    }
+
+    const normDomain = overlayNormalizeDomain(activeTabState.domain);
+    _overlayActiveDomain = normDomain;
+    card.style.display = 'block';
+
+    const cacheKey = `privacylens_summary_${normDomain}`;
+
+    const isUnavailableCache = (data) => {
+      if (!data || !data.bullets || !Array.isArray(data.bullets) || data.bullets.length === 0) return true;
+      const combined = data.bullets.join(' ').toLowerCase();
+      return combined.includes('unavailable') || combined.includes('unable to generate');
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        const storage = await chrome.storage.local.get([cacheKey, 'websiteSummaries']);
+        const summariesMap = storage.websiteSummaries || {};
+        const cachedData = storage[cacheKey] || summariesMap[normDomain];
+
+        if (cachedData && !forceRefresh && !isUnavailableCache(cachedData)) {
+          siteTitle.textContent = cachedData.websiteName || normDomain;
+          const bullets = cachedData.bullets || (cachedData.summary ? [cachedData.summary] : []);
+          textEl.textContent = Array.isArray(bullets) ? bullets.join('\n') : bullets;
+          return;
+        }
+      } catch (e) {}
+    }
+
+    siteTitle.textContent = normDomain;
+    textEl.innerHTML = '🔄 <span style="color: #64748b; font-style: italic;">Generating verified website summary...</span>';
+
+    try {
+      const apiResponse = await fetch('http://localhost:5000/api/ai/website-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: normDomain,
+          websiteName: document.title ? document.title.split('|')[0].trim() : normDomain,
+          language: 'EN',
+          pageTitle: document.title || activeTabState.title,
+          metaDescription: '',
+          headings: [],
+          forceRefresh
+        })
+      });
+
+      const data = await apiResponse.json();
+
+      if (_overlayActiveDomain !== normDomain) return;
+
+      if (data && data.bullets && data.bullets.length > 0) {
+        const summaryPayload = {
+          websiteId: normDomain,
+          domain: normDomain,
+          websiteName: data.websiteName || normDomain,
+          bullets: data.bullets,
+          summary: data.summary,
+          generatedAt: data.generatedAt || new Date().toISOString()
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          try {
+            const storage = await chrome.storage.local.get('websiteSummaries');
+            const summariesMap = storage.websiteSummaries || {};
+            summariesMap[normDomain] = summaryPayload;
+            await chrome.storage.local.set({
+              [cacheKey]: summaryPayload,
+              websiteSummaries: summariesMap
+            });
+          } catch (e) {}
+        }
+
+        siteTitle.textContent = data.websiteName || normDomain;
+        textEl.textContent = data.bullets.join('\n');
+      } else {
+        textEl.textContent = 'Verified website information unavailable.';
+      }
+    } catch (err) {
+      if (_overlayActiveDomain === normDomain) {
+        textEl.textContent = 'Website summary unavailable.';
+      }
+    }
+  }
+
   // -------------------------------------------------------
   // Main refresh: Exact copy of popup.js refreshUI()
   // (adapted: uses window.location instead of chrome.tabs.query)
@@ -1114,6 +1235,9 @@ try {
 
             // Render Recent Website Activity List
             renderRecentVisits(_shadowRef, visits);
+
+            // Load and Render Unified Website Summary Card for In-Page Overlay Panel
+            loadOverlayWebsiteBrief(_shadowRef, activeTabState, false);
           }
 
           // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
@@ -1243,6 +1367,20 @@ try {
       closeBtn.addEventListener('click', () => {
         setDismissed(domain);
         hideAutomaticOverlay();
+      });
+    }
+
+    // Refresh Brief button
+    const refreshBriefBtn = shadow.getElementById('btn-refresh-brief');
+    if (refreshBriefBtn) {
+      refreshBriefBtn.addEventListener('click', () => {
+        const activeTabState = {
+          status: 'success',
+          domain: domain,
+          title: document.title || domain,
+          url: window.location.href
+        };
+        loadOverlayWebsiteBrief(shadow, activeTabState, true);
       });
     }
 
