@@ -17,17 +17,148 @@ function normalizeDomain(hostname) {
   return domain;
 }
 
+// In-Memory JavaScript Hash Set for O(1) domain membership checks
+let visitedWebsitesSet = new Set();
+let isSetInitialized = false;
+let setInitializationPromise = null;
+
+// Sequential Promise Chain Queue to prevent race conditions during concurrent tab processing
+let processQueueChain = Promise.resolve();
+
+function enqueueVisitProcessing(taskFn) {
+  processQueueChain = processQueueChain.then(taskFn).catch((err) => {
+    console.error('Error in visit processing queue:', err);
+  });
+  return processQueueChain;
+}
+
 /**
- * Filters out internal browser/extension URLs (chrome://, edge://, file://, chrome-extension://, etc.)
+ * Ensures the in-memory JavaScript Set is initialized/rebuilt from chrome.storage.local.
+ * Seeds the Set from:
+ * 1. visitedWebsites array
+ * 2. recentWebsiteVisits array
+ * 3. exposures object keys
+ * Filters out excluded domains (like google.com or internal pages).
+ * Persists consolidated unique domains and webCount back to chrome.storage.local.
+ */
+async function initVisitedWebsitesSet() {
+  if (isSetInitialized) return;
+  if (setInitializationPromise) return setInitializationPromise;
+
+  setInitializationPromise = (async () => {
+    try {
+      const data = await chrome.storage.local.get(['visitedWebsites', 'recentWebsiteVisits', 'exposures', 'demoMode']);
+      const isDemo = data.demoMode || false;
+
+      const storedArr = data.visitedWebsites || [];
+      const recentVisits = data.recentWebsiteVisits || [];
+      const exposures = data.exposures || {};
+
+      visitedWebsitesSet = new Set();
+
+      // 1. Seed from existing stored array
+      storedArr.forEach(dom => {
+        const norm = normalizeDomain(dom);
+        if (norm && !isExcludedDomain(norm)) {
+          visitedWebsitesSet.add(norm);
+        }
+      });
+
+      // 2. Seed from existing recent visits queue
+      recentVisits.forEach(v => {
+        if (!isDemo && v.isDemo) return;
+        const norm = normalizeDomain(v.domain);
+        if (norm && !isExcludedDomain(norm)) {
+          visitedWebsitesSet.add(norm);
+        }
+      });
+
+      // 3. Seed from existing exposures records
+      Object.keys(exposures).forEach(dom => {
+        const record = exposures[dom];
+        if (!isDemo && record && record.isDemo) return;
+        const norm = normalizeDomain(dom);
+        if (norm && !isExcludedDomain(norm)) {
+          visitedWebsitesSet.add(norm);
+        }
+      });
+
+      const updatedArr = Array.from(visitedWebsitesSet);
+      const webCount = visitedWebsitesSet.size;
+
+      // Update storage so all extension components share exact consolidated count
+      await chrome.storage.local.set({
+        visitedWebsites: updatedArr,
+        webCount: webCount
+      });
+
+      isSetInitialized = true;
+    } catch (err) {
+      console.error('Error initializing visitedWebsitesSet:', err);
+      visitedWebsitesSet = new Set();
+      isSetInitialized = true;
+    } finally {
+      setInitializationPromise = null;
+    }
+  })();
+
+  return setInitializationPromise;
+}
+
+// Initialize Set immediately on service worker startup
+initVisitedWebsitesSet();
+
+// Keep in-memory Set synchronized if storage changes externally
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.visitedWebsites) {
+    visitedWebsitesSet = new Set(changes.visitedWebsites.newValue || []);
+    isSetInitialized = true;
+  }
+});
+
+/**
+ * Filters out internal browser/extension URLs, empty tabs, and Google subdomains
  */
 function isInternalUrl(urlOrDomain) {
+  return isExcludedDomain(urlOrDomain);
+}
+
+/**
+ * Centralized Exclusion Engine:
+ * Excludes:
+ * - new/empty tabs (about:blank, chrome://newtab, about:newtab, newtab)
+ * - google.com and all Google subdomains (mail.google.com, maps.google.com, etc.)
+ * - chrome://, edge://, about:, devtools://, file://, extension pages
+ */
+function isExcludedDomain(urlOrDomain) {
   if (!urlOrDomain) return true;
   const lower = urlOrDomain.toLowerCase().trim();
+  
   const internalPrefixes = [
     'chrome://', 'chrome-extension://', 'edge://', 'about:',
     'devtools://', 'file://', 'blob:', 'data:', 'view-source:'
   ];
-  return internalPrefixes.some(prefix => lower.startsWith(prefix)) || lower === 'unknown' || lower === 'newtab';
+  if (internalPrefixes.some(prefix => lower.startsWith(prefix))) return true;
+  if (lower === 'unknown' || lower === 'newtab' || lower === 'about:blank' || lower === 'about:newtab') return true;
+
+  let domain = lower;
+  if (lower.startsWith('http://') || lower.startsWith('https://')) {
+    try {
+      domain = normalizeDomain(new URL(lower).hostname);
+    } catch (e) {
+      return true;
+    }
+  } else {
+    domain = normalizeDomain(lower);
+  }
+
+  if (!domain || domain === 'unknown') return true;
+
+  // Exclude google.com and all Google subdomains / regional domains
+  if (domain === 'google.com' || domain.endsWith('.google.com')) return true;
+  if (/^google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(domain) || /\.google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(domain)) return true;
+
+  return false;
 }
 
 // Configurable Cleanup Method Registry for popular domains
@@ -216,13 +347,19 @@ function getCleanupMethod(domain) {
 }
 
 // Initial Extension Setup (Starts Completely CLEAN in Real User Mode)
+// Initial Extension Setup (Starts Completely CLEAN in Real User Mode)
 chrome.runtime.onInstalled.addListener(async () => {
-  const data = await chrome.storage.local.get(['reclaimEnabled']);
+  const data = await chrome.storage.local.get(['reclaimEnabled', 'exposureCount', 'exposures']);
   if (data.reclaimEnabled === undefined) {
+    const exposures = data.exposures || {};
+    const initialExposuresCount = Object.keys(exposures).length;
     await chrome.storage.local.set({
       reclaimEnabled: true,
       childSafeMode: false,
       demoMode: false,
+      visitedWebsites: [],     // Fast local source of truth for unique domain strings
+      webCount: 0,            // Fast local source of truth for unique website count
+      exposureCount: initialExposuresCount, // Centralized exposure/account creation count
       exposures: {},            // Clean exposures DB for real user
       recentWebsiteVisits: [],  // Clean recent visits queue for real user
       timeline: []
@@ -236,9 +373,9 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
-    if (tab && tab.url && !isInternalUrl(tab.url)) {
+    if (tab && tab.url && !isExcludedDomain(tab.url)) {
       const domain = normalizeDomain(new URL(tab.url).hostname);
-      if (domain) {
+      if (domain && !isExcludedDomain(domain)) {
         await processWebsiteVisit({ domain, url: tab.url, title: tab.title, timestamp: new Date().toISOString() });
       }
     }
@@ -251,10 +388,10 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
  * Navigation / page refresh listener for active tab updates
  */
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab && tab.active && tab.url && !isInternalUrl(tab.url)) {
+  if (changeInfo.status === 'complete' && tab && tab.active && tab.url && !isExcludedDomain(tab.url)) {
     try {
       const domain = normalizeDomain(new URL(tab.url).hostname);
-      if (domain) {
+      if (domain && !isExcludedDomain(domain)) {
         await processWebsiteVisit({ domain, url: tab.url, title: tab.title, timestamp: new Date().toISOString() });
       }
     } catch (err) {
@@ -262,6 +399,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     }
   }
 });
+
+// Deduplication set for processed account creation events
+const processedAccountEventsSet = new Set();
 
 /**
  * Message Bus Listener
@@ -273,6 +413,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     processWebsiteVisit(message);
   } else if (message.type === 'FORM_SUBMISSION') {
     processExposureEvent(message);
+    sendToBackend(message);
+  } else if (message.type === 'ACCOUNT_CREATED') {
+    handleAccountCreation(message);
     sendToBackend(message);
   } else if (message.type === 'UPDATE_CLEANUP_STATUS') {
     handleUpdateCleanupStatus(message.domain, message.status);
@@ -286,12 +429,83 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const info = getCleanupMethod(message.domain);
     sendResponse(info);
     return true;
-  } else if (message.type === 'GET_SITE_DATA') {
-    // Content script requests privacy data for the current domain
-    handleGetSiteData(message.domain).then(sendResponse).catch(() => sendResponse(null));
+  } else if (message.type === 'GET_EXTENSION_STATE' || message.type === 'GET_SITE_DATA') {
+    handleGetExtensionState(message.domain || '').then(sendResponse).catch(() => sendResponse(null));
     return true; // async sendResponse
   }
 });
+
+/**
+ * Handles confirmed Account Creation Events.
+ * Increments exposureCount by exactly 1 per successful account creation.
+ * Work for new users, signed-in users, or multiple accounts on same website.
+ */
+async function handleAccountCreation(event) {
+  const domain = normalizeDomain(event.domain);
+  if (!domain || isExcludedDomain(domain)) return;
+
+  const eventId = event.eventId || `acct_${domain}_${event.timestamp}`;
+  if (processedAccountEventsSet.has(eventId)) return; // Deduplication guard
+  processedAccountEventsSet.add(eventId);
+
+  const storage = await chrome.storage.local.get(['exposureCount', 'exposures', 'timeline', 'reclaimEnabled']);
+  if (storage.reclaimEnabled === false) return;
+
+  let exposureCount = typeof storage.exposureCount === 'number' ? storage.exposureCount : Object.keys(storage.exposures || {}).length;
+  let exposures = storage.exposures || {};
+  let timeline = storage.timeline || [];
+
+  // Increment exposureCount by exactly 1
+  exposureCount += 1;
+
+  const now = event.timestamp || new Date().toISOString();
+  const existing = exposures[domain];
+
+  if (existing) {
+    exposures[domain] = {
+      ...existing,
+      lastSeen: now,
+      accountExposure: 'confirmed',
+      eventCount: (existing.eventCount || 1) + 1,
+      riskLevel: 'high',
+      riskReasons: Array.from(new Set([...(existing.riskReasons || []), 'Confirmed Account Creation']))
+    };
+  } else {
+    exposures[domain] = {
+      id: 'exp_' + Math.random().toString(36).substring(2, 11),
+      domain: domain,
+      firstSeen: now,
+      lastSeen: now,
+      dataTypes: ['account', 'email'],
+      consentTypes: ['essential'],
+      eventCount: 1,
+      accountExposure: 'confirmed',
+      riskLevel: 'high',
+      riskReasons: ['Confirmed Account Creation'],
+      cleanupStatus: 'RECOMMENDED'
+    };
+  }
+
+  timeline.unshift({
+    domain: domain,
+    action: `New Account Created (${event.confirmationSignal || 'Confirmed'})`,
+    timestamp: now
+  });
+  if (timeline.length > 50) timeline = timeline.slice(0, 50);
+
+  await chrome.storage.local.set({
+    exposureCount: exposureCount,
+    exposures: exposures,
+    timeline: timeline
+  });
+
+  // Broadcast immediate update to UI
+  chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+  broadcastToContentScripts();
+
+  // Non-blocking async sync
+  syncVisitToGoogleDocs({ domain, eventType: 'ACCOUNT_CREATED', timestamp: now }).catch(() => {});
+}
 
 /**
  * Toggles Child Safe Mode (§9 Protection)
@@ -303,15 +517,53 @@ async function handleToggleChildSafeMode(enableChildSafeMode) {
 }
 
 /**
- * Returns exposure data for a specific domain to the content script overlay
+ * Calculates overall privacy health score (0-100) based on exposure database
  */
-async function handleGetSiteData(domain) {
-  const normalized = normalizeDomain(domain);
-  const storage = await chrome.storage.local.get(['exposures', 'demoMode', 'reclaimEnabled', 'childSafeMode']);
+function calculatePrivacyScore(exposuresObj) {
+  const records = Object.values(exposuresObj || {});
+  if (records.length === 0) return 100;
+
+  let score = 100;
+
+  records.forEach(rec => {
+    if (rec.riskLevel === 'high') score -= 10;
+    else if (rec.riskLevel === 'medium') score -= 5;
+    else score -= 2;
+
+    if (rec.consentTypes && rec.consentTypes.includes('marketing')) {
+      score -= 2;
+    }
+  });
+
+  return Math.max(15, Math.min(100, score));
+}
+
+/**
+ * Single Authoritative Extension State Contract
+ */
+async function handleGetExtensionState(domain = '') {
+  await initVisitedWebsitesSet();
+
+  const storage = await chrome.storage.local.get([
+    'exposures',
+    'recentWebsiteVisits',
+    'demoMode',
+    'reclaimEnabled',
+    'childSafeMode',
+    'exposureCount'
+  ]);
+
   const allExposures = storage.exposures || {};
+  let recentVisits = storage.recentWebsiteVisits || [];
   const isDemo = storage.demoMode || false;
   const enabled = storage.reclaimEnabled !== false;
   const childSafeMode = storage.childSafeMode || false;
+
+  const visitedWebsites = Array.from(visitedWebsitesSet);
+  const webCount = visitedWebsitesSet.size;
+  const exposureCount = typeof storage.exposureCount === 'number'
+    ? storage.exposureCount
+    : Object.keys(allExposures).length;
 
   // Filter exposures based on demo mode
   const activeExposures = {};
@@ -322,13 +574,31 @@ async function handleGetSiteData(domain) {
     }
   });
 
+  if (!isDemo) {
+    recentVisits = recentVisits.filter(v => !v.isDemo);
+  }
+
+  const normalizedDomain = domain ? normalizeDomain(domain) : '';
+
   return {
-    siteExposure: activeExposures[normalized] || null,
+    webCount: webCount,
+    exposureCount: exposureCount,
+    visitedWebsites: visitedWebsites,
+    recentWebsiteVisits: recentVisits,
     exposures: activeExposures,
+    siteExposure: normalizedDomain ? (activeExposures[normalizedDomain] || null) : null,
+    privacyScore: calculatePrivacyScore(activeExposures),
     demoMode: isDemo,
     enabled: enabled,
     childSafeMode: childSafeMode
   };
+}
+
+/**
+ * Backwards compatible alias
+ */
+async function handleGetSiteData(domain) {
+  return handleGetExtensionState(domain);
 }
 
 /**
@@ -338,7 +608,7 @@ async function broadcastToContentScripts() {
   try {
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
-      if (tab.id && tab.url && !isInternalUrl(tab.url)) {
+      if (tab.id && tab.url && !isExcludedDomain(tab.url)) {
         chrome.tabs.sendMessage(tab.id, { type: 'OVERLAY_DATA_UPDATE' }).catch(() => {});
       }
     }
@@ -349,43 +619,117 @@ async function broadcastToContentScripts() {
 
 /**
  * Processes Real Website Navigation Visit
- * Maintains rolling 5 most recently visited UNIQUE domains.
+ * O(1) Hash Set membership check algorithm with serialized promise queueing to prevent race conditions.
+ *
+ * Algorithm:
+ * 1. Extract and normalize hostname
+ * 2. Check exclusion engine (new tab, internal pages, google domains)
+ * 3. Enqueue visit processing sequentially
+ * 4. O(1) check: visitedWebsitesSet.has(domain)
+ * 5. If domain DOES NOT exist:
+ *    - visitedWebsitesSet.add(domain)
+ *    - increment webCount
+ *    - persist updated Array.from(visitedWebsitesSet) & webCount to chrome.storage.local
+ *    - notify UI
+ *    - trigger non-blocking async Google Docs sync
+ * 6. If domain ALREADY exists:
+ *    - do nothing
  */
 async function processWebsiteVisit(data) {
-  const domain = normalizeDomain(data.domain);
-  if (!domain || isInternalUrl(domain) || isInternalUrl(data.url)) {
-    return; // Ignore internal browser pages (chrome://, edge://, extension pages, file://)
+  const rawUrl = data.url || '';
+  const rawDomain = data.domain || '';
+
+  if (isExcludedDomain(rawUrl) || isExcludedDomain(rawDomain)) {
+    return; // Exclude internal browser pages, new tabs, and google domains
   }
 
-  const storage = await chrome.storage.local.get(['recentWebsiteVisits', 'reclaimEnabled', 'demoMode']);
-  
-  // Stop recording if RECLAIM is disabled by user
-  if (storage.reclaimEnabled === false) return;
+  let domain = '';
+  if (rawUrl && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+    try {
+      domain = normalizeDomain(new URL(rawUrl).hostname);
+    } catch (e) {
+      domain = normalizeDomain(rawDomain);
+    }
+  } else {
+    domain = normalizeDomain(rawDomain);
+  }
 
-  const isDemo = storage.demoMode || false;
-  let visits = storage.recentWebsiteVisits || [];
+  if (!domain || isExcludedDomain(domain)) return;
 
-  const now = data.timestamp || new Date().toISOString();
+  // Enqueue processing to prevent race conditions when multiple tabs open concurrently
+  return enqueueVisitProcessing(async () => {
+    await initVisitedWebsitesSet();
 
-  // Deduplication logic for Recent Website Activity:
-  // If domain was previously visited, remove old entry so it moves to top with latest timestamp
-  visits = visits.filter(v => normalizeDomain(v.domain) !== domain);
+    const storage = await chrome.storage.local.get(['recentWebsiteVisits', 'reclaimEnabled', 'demoMode']);
+    
+    // Stop recording if RECLAIM is disabled by user
+    if (storage.reclaimEnabled === false) return;
 
-  // Insert newest visit at index 0 (TOP)
-  visits.unshift({
-    domain: domain,
-    timestamp: now,
-    isDemo: isDemo
+    const isDemo = storage.demoMode || false;
+    let visits = storage.recentWebsiteVisits || [];
+    const now = data.timestamp || new Date().toISOString();
+
+    // Step 1: O(1) Hash Set Membership Check
+    const exists = visitedWebsitesSet.has(domain);
+    let isNewUniqueVisit = false;
+
+    // Step 2: If domain does NOT exist in Set -> add, update webCount, persist to chrome.storage.local
+    if (!exists) {
+      visitedWebsitesSet.add(domain);
+      isNewUniqueVisit = true;
+
+      const updatedArray = Array.from(visitedWebsitesSet);
+      const webCount = visitedWebsitesSet.size;
+
+      await chrome.storage.local.set({
+        visitedWebsites: updatedArray,
+        webCount: webCount
+      });
+    }
+
+    // Step 3: Update Recent Website Activity list (rolling 5)
+    visits = visits.filter(v => normalizeDomain(v.domain) !== domain);
+    visits.unshift({
+      domain: domain,
+      timestamp: now,
+      isDemo: isDemo
+    });
+
+    if (visits.length > MAX_RECENT_VISITS) {
+      visits = visits.slice(0, MAX_RECENT_VISITS);
+    }
+
+    await chrome.storage.local.set({ recentWebsiteVisits: visits });
+
+    // Step 4: Broadcast immediate update to UI
+    chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
+    broadcastToContentScripts();
+
+    // Step 5: Asynchronously sync to Google Docs / external backend (non-blocking)
+    if (isNewUniqueVisit) {
+      syncVisitToGoogleDocs({ domain, timestamp: now }).catch(() => {});
+    }
   });
+}
 
-  // Limit to maximum 5 unique recent domains
-  if (visits.length > MAX_RECENT_VISITS) {
-    visits = visits.slice(0, MAX_RECENT_VISITS);
+/**
+ * Asynchronously syncs visit metadata to Google Docs / external backend without blocking real-time count
+ */
+async function syncVisitToGoogleDocs(visitData) {
+  try {
+    await fetch(BACKEND_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: visitData.domain,
+        eventType: 'WEBSITE_VISIT',
+        timestamp: visitData.timestamp,
+        source: 'PRIVACY_LENS_AUTO_SYNC'
+      })
+    });
+  } catch (err) {
+    // Offline resilience - backend/Google Docs sync fails silently without affecting local fast webCount
   }
-
-  await chrome.storage.local.set({ recentWebsiteVisits: visits });
-  chrome.runtime.sendMessage({ type: 'DATA_UPDATED' }).catch(() => {});
-  broadcastToContentScripts();
 }
 
 /**
@@ -457,9 +801,13 @@ async function handleToggleDemoMode(enableDemo) {
  * Clears all local exposure & activity data
  */
 async function handleClearAllData() {
+  visitedWebsitesSet.clear();
   await chrome.storage.local.set({
     exposures: {},
     recentWebsiteVisits: [],
+    visitedWebsites: [],
+    webCount: 0,
+    exposureCount: 0,
     timeline: [],
     demoMode: false
   });

@@ -105,35 +105,10 @@ function calculatePrivacyScore(exposuresObj) {
 }
 
 /**
- * Main UI refresh loop - Single Source of Truth from active browser tab
+ * Main UI refresh loop — Requests Authoritative Single Source of Truth from background.js
  */
 async function refreshUI() {
-  const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode']);
-  const allExposures = storage.exposures || {};
-  let visits = storage.recentWebsiteVisits || [];
-  const isDemo = storage.demoMode || false;
-  const isChildSafe = storage.childSafeMode || false;
-
-  // Update Child Safe Mode toggle UI
-  const toggleChildSafe = document.getElementById('toggle-child-safe');
-  if (toggleChildSafe) {
-    toggleChildSafe.checked = isChildSafe;
-  }
-
-  // Filter exposure records and visits based on Demo Mode isolation
-  const activeExposures = {};
-  Object.keys(allExposures).forEach(domainKey => {
-    const record = allExposures[domainKey];
-    if (isDemo || !record.isDemo) {
-      activeExposures[domainKey] = record;
-    }
-  });
-
-  if (!isDemo) {
-    visits = visits.filter(v => !v.isDemo);
-  }
-
-  // Active Tab State Machine
+  // Determine active tab details first
   let activeTabState = {
     status: 'loading', // loading | detected | analyzing | success | unsupported-page | error
     domain: '',
@@ -166,12 +141,48 @@ async function refreshUI() {
     activeTabState.status = 'error';
   }
 
+  // Request authoritative single source of truth state from background.js
+  let extState = null;
+  try {
+    extState = await chrome.runtime.sendMessage({
+      type: 'GET_EXTENSION_STATE',
+      domain: activeTabState.domain
+    });
+  } catch (e) {
+    extState = null;
+  }
+
+  // Fallback to local storage if background worker response is empty
+  if (!extState) {
+    const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'visitedWebsites', 'webCount', 'exposureCount']);
+    const visitedArr = storage.visitedWebsites || [];
+    extState = {
+      webCount: typeof storage.webCount === 'number' ? storage.webCount : visitedArr.length,
+      exposureCount: typeof storage.exposureCount === 'number' ? storage.exposureCount : Object.keys(storage.exposures || {}).length,
+      visitedWebsites: visitedArr,
+      recentWebsiteVisits: storage.recentWebsiteVisits || [],
+      exposures: storage.exposures || {},
+      siteExposure: activeTabState.domain ? (storage.exposures || {})[activeTabState.domain] || null : null,
+      demoMode: storage.demoMode || false,
+      childSafeMode: storage.childSafeMode || false
+    };
+  }
+
+  const activeExposures = extState.exposures || {};
+  let visits = extState.recentWebsiteVisits || [];
+  const isChildSafe = extState.childSafeMode || false;
+
+  // Update Child Safe Mode toggle UI
+  const toggleChildSafe = document.getElementById('toggle-child-safe');
+  if (toggleChildSafe) {
+    toggleChildSafe.checked = isChildSafe;
+  }
+
   // Check webpage for indicators of behavioral tracking or targeted ads (§9)
   let hasBehavioralTracking = false;
 
-  const currentExposure = activeExposures[activeTabState.domain];
+  const currentExposure = extState.siteExposure || activeExposures[activeTabState.domain];
   if (currentExposure) {
-    // Check if recorded consent types include marketing/promotional or if risk reasons indicate tracking
     if ((currentExposure.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
       hasBehavioralTracking = true;
     }
@@ -196,8 +207,8 @@ async function refreshUI() {
   // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
   renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
 
-  // Render Overall Overview Metrics & Privacy Score
-  renderExposureOverview(activeExposures);
+  // Render Overall Overview Metrics & Privacy Score (Passing extState as storageData)
+  renderExposureOverview(activeExposures, extState);
 
   // Render Recent Website Activity List (rolling 5 most recently visited unique domains)
   renderRecentVisits(visits);
@@ -299,15 +310,21 @@ function renderCurrentSite(activeTabState, siteExposure) {
 /**
  * Renders digital exposure metrics & calculated privacy score
  */
-function renderExposureOverview(exposures) {
+function renderExposureOverview(exposures, storageData) {
   const records = Object.values(exposures || {});
   
-  const totalWebsites = records.length;
-  const totalExposures = records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
+  const visitedWebsites = (storageData && storageData.visitedWebsites) || [];
+  const totalWebsites = (storageData && typeof storageData.webCount === 'number')
+    ? storageData.webCount
+    : (visitedWebsites.length || Object.keys(exposures || {}).length);
+
+  const exposureCount = (storageData && typeof storageData.exposureCount === 'number')
+    ? storageData.exposureCount
+    : records.reduce((acc, r) => acc + (r.eventCount || 1), 0);
   const highRiskCount = records.filter(r => r.riskLevel === 'high').length;
 
   document.getElementById('stat-websites').textContent = totalWebsites;
-  document.getElementById('stat-accounts').textContent = totalExposures;
+  document.getElementById('stat-accounts').textContent = exposureCount;
   document.getElementById('stat-high-risk').textContent = highRiskCount;
 
   // Calculate and update score
