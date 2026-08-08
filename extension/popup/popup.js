@@ -434,10 +434,64 @@ function renderRecentVisits(visits) {
   });
 }
 
+let currentActiveDomain = '';
+let currentSelectedLanguage = 'EN';
+
 /**
- * Loads, caches, and renders the AI-powered Website Brief.
- * Uses message passing to fetch DOM metadata from content script,
- * then fetches from backend controller and caches in local storage.
+ * Normalizes host domain or full URL to primary domain identifier (e.g. https://www.youtube.com/watch?v=123 -> youtube.com)
+ */
+function normalizeDomain(hostnameOrUrl) {
+  if (!hostnameOrUrl) return '';
+  let str = hostnameOrUrl.trim().toLowerCase();
+  if (str.includes('://')) {
+    try {
+      str = new URL(str).hostname;
+    } catch (e) {
+      str = str.split('://')[1].split('/')[0];
+    }
+  }
+  str = str.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+  if (str.startsWith('www.')) {
+    str = str.substring(4);
+  }
+  return str;
+}
+
+/**
+ * Setup language selector buttons in WEBSITE SUMMARY card
+ */
+function setupLanguageSelector(activeTabState, activeTabId) {
+  const langSelector = document.getElementById('brief-lang-selector');
+  if (!langSelector) return;
+
+  const btns = langSelector.querySelectorAll('.brief-lang-btn');
+  btns.forEach(btn => {
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      const lang = btn.getAttribute('data-lang');
+      currentSelectedLanguage = lang;
+      btns.forEach(b => {
+        if (b.getAttribute('data-lang') === lang) {
+          b.style.background = '#2563eb';
+          b.style.color = 'white';
+          b.classList.add('active');
+        } else {
+          b.style.background = 'transparent';
+          b.style.color = '#64748b';
+          b.classList.remove('active');
+        }
+      });
+      if (activeTabState && activeTabState.domain) {
+        await loadWebsiteBrief(activeTabState, activeTabId, false);
+      }
+    };
+  });
+}
+
+/**
+ * Loads, caches, and renders the AI-powered Website Summary.
+ * Uses strict domain keying: privacylens_summary_<normalized_domain>
+ * Shared between Extension, Website Details, and Reclaim panel.
  */
 async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = false) {
   const card = document.getElementById('website-brief-card');
@@ -446,30 +500,41 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
 
   if (!card || !siteTitle || !textEl) return;
 
-  // 1. Safe visibility guard: Hide brief card on loading, internal, or error tab states
+  // 1. Safe visibility guard: Hide summary card on loading, internal, or error tab states
   if (activeTabState.status !== 'success' || !activeTabState.domain) {
     card.style.display = 'none';
+    currentActiveDomain = '';
     return;
   }
 
-  const domain = activeTabState.domain;
+  const normDomain = normalizeDomain(activeTabState.domain);
+  currentActiveDomain = normDomain;
   card.style.display = 'block';
 
-  // 2. Local Storage Cache Check
-  const storage = await chrome.storage.local.get('websiteBriefs');
-  const briefs = storage.websiteBriefs || {};
+  // Setup language selector event handlers
+  setupLanguageSelector(activeTabState, activeTabId);
 
-  if (briefs[domain] && !forceRefresh) {
-    siteTitle.textContent = briefs[domain].siteName || domain;
-    textEl.textContent = briefs[domain].brief;
+  // 2. Strict Domain-Keyed Cache Check: privacylens_summary_<domain>
+  const cacheKey = `privacylens_summary_${normDomain}`;
+  const storage = await chrome.storage.local.get([cacheKey, 'websiteSummaries']);
+  const summariesMap = storage.websiteSummaries || {};
+  const cachedData = storage[cacheKey] || summariesMap[normDomain];
+
+  if (cachedData && !forceRefresh) {
+    siteTitle.textContent = cachedData.websiteName || normDomain;
+    const bullets = cachedData.bullets || (cachedData.summary ? [cachedData.summary] : []);
+    textEl.textContent = Array.isArray(bullets) ? bullets.join('\n') : bullets;
+    
+    // Output debug log as required by specification
+    console.log(`[PrivacyLens Summary] Current Website: ${activeTabState.domain} | Website ID: ${normDomain} | AI Request: ${normDomain} | Cache Key: ${cacheKey}`);
     return;
   }
 
-  // 3. Initiate summary fetch
-  siteTitle.textContent = domain;
-  textEl.innerHTML = '🔄 <span style="color: #64748b; font-style: italic;">Generating AI summary...</span>';
+  // 3. Prevent Stale State: Clear previous website summary immediately while loading
+  siteTitle.textContent = normDomain;
+  textEl.innerHTML = '🔄 <span style="color: #64748b; font-style: italic;">Generating verified website summary...</span>';
 
-  // Extract metadata (title, headings, descriptions) using content script message passing
+  // Extract metadata using content script message passing
   let domMetadata = {
     title: activeTabState.title,
     metaDescription: '',
@@ -499,38 +564,62 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
     }
   }
 
-  // Submit to backend API securely (protects Gemini API key on the backend)
+  // 4. Submit to Unified Backend API Endpoint
   try {
-    const apiResponse = await fetch('http://localhost:5000/api/ai/website-brief', {
+    const apiResponse = await fetch('http://localhost:5000/api/ai/website-summary', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        domain: domain,
-        title: domMetadata.title || activeTabState.title,
+        domain: normDomain,
+        websiteName: domMetadata.title ? domMetadata.title.split('|')[0].trim() : normDomain,
+        language: currentSelectedLanguage,
+        pageTitle: domMetadata.title || activeTabState.title,
         metaDescription: domMetadata.metaDescription || '',
-        headings: domMetadata.headings || []
+        headings: domMetadata.headings || [],
+        forceRefresh
       })
     });
 
     const data = await apiResponse.json();
-    if (data && data.success) {
-      // Update Cache
-      briefs[domain] = {
-        siteName: data.siteName,
-        brief: data.brief
-      };
-      await chrome.storage.local.set({ websiteBriefs: briefs });
 
-      // Display
-      siteTitle.textContent = data.siteName || domain;
-      textEl.textContent = data.brief;
+    // 5. ASYNCHRONOUS RACE CONDITION CHECK:
+    // If the active domain changed while the request was in flight, discard the stale response!
+    if (currentActiveDomain !== normDomain) {
+      console.warn(`[PrivacyLens Summary] Discarding stale response for ${normDomain} as active domain switched to ${currentActiveDomain}`);
+      return;
+    }
+
+    if (data && data.bullets && data.bullets.length > 0) {
+      const summaryPayload = {
+        websiteId: normDomain,
+        domain: normDomain,
+        websiteName: data.websiteName || normDomain,
+        bullets: data.bullets,
+        summary: data.summary,
+        generatedAt: data.generatedAt || new Date().toISOString()
+      };
+
+      // Save to cache using strict key privacylens_summary_<domain>
+      summariesMap[normDomain] = summaryPayload;
+      await chrome.storage.local.set({
+        [cacheKey]: summaryPayload,
+        websiteSummaries: summariesMap
+      });
+
+      // Update UI
+      siteTitle.textContent = data.websiteName || normDomain;
+      textEl.textContent = data.bullets.join('\n');
+      
+      console.log(`[PrivacyLens Summary] Current Website: ${activeTabState.domain} | Website ID: ${normDomain} | AI Request: ${normDomain} | Cache Key: ${cacheKey}`);
     } else {
-      textEl.textContent = data.brief || 'Unable to generate a reliable website summary.';
+      textEl.textContent = 'Verified website information unavailable.';
     }
   } catch (err) {
-    console.error('Error fetching website brief:', err);
-    textEl.textContent = 'Website summary unavailable.';
+    console.error('Error fetching website summary:', err);
+    if (currentActiveDomain === normDomain) {
+      textEl.textContent = 'Website summary unavailable.';
+    }
   }
 }

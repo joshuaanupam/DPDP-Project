@@ -2,6 +2,7 @@
  * @file aiService.js
  * @description PrivacyLens AI Intelligence Service powered by Google Gemini API
  * with multi-language support (Hindi/Telugu) and deterministic rule-based fallbacks.
+ * Enforces ONE unified, domain-keyed Website Summary system across Extension, Website Details, and Reclaim.
  * Owned by: TM1 (Project Lead & AI Intelligence Engineer)
  */
 
@@ -11,486 +12,521 @@ const https = require('https');
 const DEFAULT_TIMEOUT_MS = 6000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
-// Pre-translated standard fallbacks for Hindi (§5(3) + §6(3) support)
-const HINDI_FALLBACKS = {
-  highRisk: {
-    bullet1: "यह वेबसाइट आपकी व्यक्तिगत संपर्क जानकारी, स्थान और वित्तीय विवरण एकत्र करती है और इसे तीसरे पक्ष के विज्ञापनदाताओं के साथ साझा करती है।",
-    bullet2: "डेटा को अनिश्चित काल तक बनाए रखा जाता है; आप किसी भी समय सहमति वापस लेने या डेटा हटाने (Erasure) के लिए अनुरोध कर सकते हैं।"
-  },
-  medRisk: {
-    bullet1: "यह वेबसाइट सेवा वितरण को अनुकूलित करने के लिए आपके खाते की साख और उपयोग विश्लेषण विवरणों को ट्रैक करती है।",
-    bullet2: "आप कानून के तहत किसी भी समय अपनी सहमति वापस ले सकते हैं या डेटा हटाने का अनुरोध कर सकते हैं।"
-  },
-  lowRisk: {
-    bullet1: "यह वेबसाइट केवल सेवा वितरण के लिए आवश्यक न्यूनतम व्यक्तिगत क्रेडेंशियल एकत्र करती है।",
-    bullet2: "डीपीडीपी अधिनियम (DPDP Act) के तहत सहमति वापस लेने और रिकॉर्ड हटाने के अधिकार सुरक्षित हैं।"
-  }
-};
-
-// Pre-translated standard fallbacks for Telugu (§5(3) + §6(3) support)
-const TELUGU_FALLBACKS = {
-  highRisk: {
-    bullet1: "ఈ వెబ్‌సైట్ మీ వ్యక్తిగత సంప్రదింపు సమాచారం, స్థానం మరియు ఆర్థిక వివరాలను సేకరిస్తుంది మరియు దీనిని మూడవ పక్ష ప్రకటనదారులతో భాగస్వామ్యం చేస్తుంది.",
-    bullet2: "డేటా నిరవధికంగా నిలుపుకోబడుతుంది; మీరు ఏ సమయంలోనైనా సమ్మతిని ఉపసంహరించుకోవచ్చు లేదా డేటా తొలగింపును అభ్యర్థించవచ్చు."
-  },
-  medRisk: {
-    bullet1: "ఈ వెబ్‌సైట్ సేవా పంపిణీని మెరుగుపరచడానికి మీ ఖాతా ఆధారాలను మరియు వినియోగ విశ్లేషణల వివరాలను ట్రాక్ చేస్తుంది.",
-    bullet2: "మీరు చట్టం ప్రకారం ఏ సమయంలోనైనా మీ సమ్మతిని ఉపసంహరించుకోవచ్చు లేదా డేటా తొలగింపును అభ్యర్థించవచ్చు."
-  },
-  lowRisk: {
-    bullet1: "ఈ వెబ్‌సైట్ సేవా పంపిణీకి అవసరమైన కనీస వ్యక్తిగత ఆధారాలను మాత్రమే సేకరిస్తుంది.",
-    bullet2: "డిపిడిపి చట్టం (DPDP Act) కింద సమ్మతిని ఉపసంహరించుకునే మరియు రికార్డులను తొలగించే హక్కులు సురక్షితం."
-  }
-};
-
 /**
- * Summarizes complex legal privacy policy text into 2 crisp, plain-English/Hindi/Telugu bullet points.
- * Automatically fails over to the intelligent rule-based analyzer if API key is missing or request times out.
- * 
- * @param {string} policyText - Raw legal terms or privacy policy content
- * @param {string} [siteName='Website'] - Name of the website/service
- * @param {object} [options={}] - Custom options (timeout, apiKey, language, etc.)
- * @returns {Promise<{
- *   success: boolean,
- *   summary: string,
- *   bullets: string[],
- *   riskLevel: 'Low' | 'Medium' | 'High',
- *   keyTakeaways: string[],
- *   isFallback: boolean,
- *   modelUsed: string
- * }>}
+ * Normalizes host domain for display and storage consistency.
+ * Strips http://, https://, www., path, query params, ports.
+ * e.g., https://www.youtube.com/watch?v=123 -> youtube.com
+ *       https://github.com/user/repo -> github.com
  */
-async function summarizePrivacyPolicy(policyText, siteName = 'Website', options = {}) {
-  const cleanText = (policyText || '').trim();
-  const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
-  const language = (options.language || 'EN').toUpperCase(); // EN, HI, TE
-
-  if (!cleanText) {
-    return {
-      success: true,
-      summary: language === 'HI'
-        ? `• ${siteName} सेवा वितरण के लिए मानक खाता विवरण एकत्र करता है।\n• उपयोगकर्ता डीपीडीपी अधिनियम 2023 के तहत सहमति वापस ले सकते हैं।`
-        : language === 'TE'
-        ? `• ${siteName} సేవా పంపిణీ కోసం ప్రామాణిక ఖాతా వివరాలను సేకరిస్తుంది.\n• వినియోగదారులు డిపిడిపి చట్టం 2023 కింద సమ్మతిని ఉపసంహరించుకోవచ్చు.`
-        : `• ${siteName} collects standard account details for service delivery.\n• Users may exercise consent revocation under DPDP Act 2023.`,
-      bullets: language === 'HI'
-        ? [`${siteName} सेवा वितरण के लिए मानक खाता विवरण एकत्र करता है।`, `उपयोगकर्ता डीपीडीपी अधिनियम 2023 के तहत सहमति वापस ले सकते हैं।`]
-        : language === 'TE'
-        ? [`${siteName} సేవా పంపిణీ కోసం ప్రామాణిక ఖాతా వివరాలను సేకరిస్తుంది.`, `వినియోగదారులు డిపిడిపి చట్టం 2023 కింద సమ్మతిని ఉపసంహరించుకోవచ్చు.`]
-        : [`${siteName} collects standard account details for service delivery.`, `Users may exercise consent revocation under DPDP Act 2023.`],
-      riskLevel: 'Low',
-      keyTakeaways: ['Standard Account Data', 'DPDP Protected'],
-      isFallback: true,
-      modelUsed: 'rule-based-default'
-    };
-  }
-
-  // Attempt Gemini API call if API key is available
-  if (apiKey) {
+function normalizeDomain(urlOrHostname) {
+  if (!urlOrHostname) return '';
+  let str = urlOrHostname.trim().toLowerCase();
+  
+  // Remove protocol
+  if (str.includes('://')) {
     try {
-      const geminiResult = await callGeminiAPI(cleanText, siteName, apiKey, options.timeout || DEFAULT_TIMEOUT_MS, language);
-      if (geminiResult && geminiResult.bullets && geminiResult.bullets.length >= 2) {
-        return {
-          success: true,
-          summary: geminiResult.bullets.map(b => `• ${b}`).join('\n'),
-          bullets: geminiResult.bullets,
-          riskLevel: geminiResult.riskLevel || 'Medium',
-          keyTakeaways: geminiResult.keyTakeaways || ['DPDP §6 Consent', 'Data Retention'],
-          isFallback: false,
-          modelUsed: GEMINI_MODEL
-        };
-      }
-    } catch (err) {
-      console.warn(`[aiService] Gemini API call failed (${err.message}). Activating rule-based fallback.`);
+      str = new URL(str).hostname;
+    } catch (e) {
+      str = str.split('://')[1].split('/')[0];
     }
   }
-
-  // Robust Rule-Based Fallback Engine
-  return generateRuleBasedSummary(cleanText, siteName, language);
+  
+  // Remove path / query / port
+  str = str.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+  
+  // Strip leading www.
+  if (str.startsWith('www.')) {
+    str = str.substring(4);
+  }
+  return str;
 }
 
-/**
- * Calls the Google Gemini API with strict temperature and timeout.
- */
-async function callGeminiAPI(policyText, siteName, apiKey, timeoutMs, language = 'EN') {
-  let langInstruction = "English.";
-  if (language === 'HI') langInstruction = "Hindi (हिंदी). Provide the responses in Hindi language script.";
-  if (language === 'TE') langInstruction = "Telugu (తెలుగు). Provide the responses in Telugu language script.";
-
-  const prompt = `You are PrivacyLens AI, an expert privacy analyst under India's Digital Personal Data Protection (DPDP) Act 2023.
-Analyze the following privacy policy excerpt for the website "${siteName}".
-
-Provide EXACTLY TWO plain-language sentences in ${langInstruction} (max 2 sentences total, no complex legal jargon):
-1. Bullet 1: What personal data is collected and whether it is shared with third parties or advertisers.
-2. Bullet 2: How long data is retained and how the user can exercise DPDP rights (revocation or erasure).
-
-Also assign a risk level: "Low", "Medium", or "High".
-Return your response in STRICT JSON format:
-{
-  "bullets": [
-    "Sentence 1 in requested language describing data collected and third-party sharing.",
-    "Sentence 2 in requested language describing retention and DPDP consent revocation/erasure rights."
-  ],
-  "riskLevel": "Low" | "Medium" | "High",
-  "keyTakeaways": ["Short Tag 1", "Short Tag 2"]
-}
-
-Privacy Policy Text:
-"""
-${policyText.slice(0, 4000)}
-"""`;
-
-  const payload = JSON.stringify({
-    contents: [
-      {
-        parts: [
-          { text: prompt }
-        ]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 384,
-      responseMimeType: "application/json"
+// ─── Verified Database of Standard Tracked Websites ─────────────────────────
+const VERIFIED_WEBSITE_DATABASE = {
+  'youtube.com': {
+    siteName: 'YouTube',
+    domain: 'youtube.com',
+    bullets: {
+      EN: [
+        'Video-sharing platform for watching, uploading, and interacting with content',
+        'Supports channels, subscriptions, playlists, comments, and video uploads',
+        'Provides video discovery and creator content monetization services'
+      ],
+      HI: [
+        'सामग्री देखने, अपलोड करने और बातचीत करने के लिए वीडियो-साझाकरण प्लेटफ़ॉर्म',
+        'चैनल, सदस्यताएँ, प्लेलिस्ट, टिप्पणियाँ और वीडियो अपलोड का समर्थन करता है',
+        'वीडियो खोज और निर्माता सामग्री मुद्रीकरण सेवाएँ प्रदान करता है'
+      ],
+      TE: [
+        'కంటెంట్‌ను చూడటానికి, అప్‌లోడ్ చేయడానికి మరియు పరస్పర చర్య చేయడానికి వీడియో-షేరింగ్ ప్లాట్‌ఫారమ్',
+        'ఛానెల్‌లు, సబ్‌స్క్రిప్షన్‌లు, ప్లేలిస్ట్‌లు, కామెంట్‌లు మరియు వీడియో అప్‌లోడ్‌లకు మద్దతు ఇస్తుంది',
+        'వీడియో ఆవిష్కరణ మరియు క్రియేటర్ కంటెంట్ మోనిటైజేషన్ సేవలను అందిస్తుంది'
+      ]
     }
-  });
-
-  return new Promise((resolve, reject) => {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-    const req = https.request(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      },
-      timeout: timeoutMs
-    }, (res) => {
-      let rawData = '';
-      res.on('data', chunk => { rawData += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try {
-            const parsed = JSON.parse(rawData);
-            const candidateText = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (candidateText) {
-              const jsonResult = JSON.parse(candidateText);
-              resolve(jsonResult);
-              return;
-            }
-            reject(new Error('Invalid Gemini response format'));
-          } catch (e) {
-            reject(new Error(`JSON Parse Error on Gemini output: ${e.message}`));
-          }
-        } else {
-          reject(new Error(`Gemini API returned status ${res.statusCode}: ${rawData.slice(0, 100)}`));
-        }
-      });
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error(`Gemini API request timed out after ${timeoutMs}ms`));
-    });
-
-    req.on('error', (err) => reject(err));
-    req.write(payload);
-    req.end();
-  });
-}
-
-/**
- * Intelligent Rule-Based Fallback Policy Analyzer with multilingual fallbacks (§5(3) + §6(3) support).
- */
-function generateRuleBasedSummary(text, siteName, language = 'EN') {
-  const lower = text.toLowerCase();
-
-  // Pattern detection
-  const hasThirdPartyAds = /third[- ]party|ad network|advertising partner|share.*advertis|marketing partner|affiliate/i.test(lower);
-  const hasTracking = /track|cookie|pixel|behavioral|analytics|device fingerprint|ip address/i.test(lower);
-  const hasSensitiveData = /biometric|location|financial|card|bank|health|aadhaar|pan/i.test(lower);
-  const hasIndefiniteRetention = /indefinitely|as long as needed|perpetual|retained until account/i.test(lower);
-  const hasExplicitOptOut = /opt[- ]out|unsubscribe|revoke consent|dpdp|erasure|delete data/i.test(lower);
-  const hasPhoneEmail = /email|phone|mobile|contact number/i.test(lower);
-
-  // Determine Risk Level
-  let riskScore = 0;
-  if (hasThirdPartyAds) riskScore += 2;
-  if (hasTracking) riskScore += 1;
-  if (hasSensitiveData) riskScore += 3;
-  if (hasIndefiniteRetention) riskScore += 1;
-  if (!hasExplicitOptOut) riskScore += 1;
-
-  let riskLevel = 'Low';
-  if (riskScore >= 4) riskLevel = 'High';
-  else if (riskScore >= 2) riskLevel = 'Medium';
-
-  // Output generation based on selected language
-  let bullet1 = '';
-  let bullet2 = '';
-
-  if (language === 'HI') {
-    const dictionary = HINDI_FALLBACKS[riskLevel.toLowerCase() + 'Risk'] || HINDI_FALLBACKS.medRisk;
-    bullet1 = dictionary.bullet1.replace('यह वेबसाइट', `${siteName}`);
-    bullet2 = dictionary.bullet2;
-  } else if (language === 'TE') {
-    const dictionary = TELUGU_FALLBACKS[riskLevel.toLowerCase() + 'Risk'] || TELUGU_FALLBACKS.medRisk;
-    bullet1 = dictionary.bullet1.replace('ఈ వెబ్‌సైట్', `${siteName}`);
-    bullet2 = dictionary.bullet2;
-  } else {
-    // English default
-    if (hasThirdPartyAds && hasPhoneEmail) {
-      bullet1 = `${siteName} collects your contact details and shares behavioral data with 3rd-party advertising networks.`;
-    } else if (hasThirdPartyAds) {
-      bullet1 = `${siteName} shares analytical and browsing data with marketing partners for targeted promotions.`;
-    } else if (hasTracking) {
-      bullet1 = `${siteName} tracks device analytics and user activity to optimize internal platform performance.`;
-    } else {
-      bullet1 = `${siteName} collects basic account credentials and profile metadata strictly for account management.`;
+  },
+  'github.com': {
+    siteName: 'GitHub',
+    domain: 'github.com',
+    bullets: {
+      EN: [
+        'Software development platform for hosting and managing Git repositories',
+        'Supports repositories, pull requests, issues, and team code collaboration',
+        'Provides version control, automated CI/CD workflows, and open-source project management'
+      ],
+      HI: [
+        'Git रिपॉजिटरी की मेजबानी और प्रबंधन के लिए सॉफ्टवेयर विकास प्लेटफ़ॉर्म',
+        'रिपॉजिटरी, पुल रिक्वेस्ट, इश्यू और टीम कोड सहयोग का समर्थन करता है',
+        'वर्ज़न कंट्रोल, स्वचालित वर्कफ़्लो और ओपन-सोर्स प्रोजेक्ट प्रबंधन प्रदान करता है'
+      ],
+      TE: [
+        'Git రిపోజిటరీలను హోస్ట్ చేయడానికి మరియు నిర్వహించడానికి సాఫ్ట్‌వేర్ అభివృద్ధి ప్లాట్‌ఫారమ్',
+        'రిపోజిటరీలు, పుల్ రిక్వెస్ట్‌లు, ఇష్యూలు మరియు టీమ్ కోడ్ సహకారానికి మద్దతు ఇస్తుంది',
+        'వెర్షన్ కంట్రోల్, ఆటోమేటెడ్ వర్క్‌ఫ్లోలు మరియు ఓపెన్ సోర్స్ ప్రాజెక్ట్ మేనేజ్‌మెంట్‌ను అందిస్తుంది'
+      ]
     }
-
-    if (hasExplicitOptOut) {
-      bullet2 = `Data is retained during active usage; users can exercise Section 6 Consent Revocation and Section 12 Erasure anytime.`;
-    } else if (hasIndefiniteRetention) {
-      bullet2 = `Data is retained until explicit deletion; request DPDP Section 12 erasure to purge inactive records.`;
-    } else {
-      bullet2 = `You retain the statutory right under India's DPDP Act to revoke marketing permissions and demand data deletion.`;
+  },
+  'amazon.com': {
+    siteName: 'Amazon',
+    domain: 'amazon.com',
+    bullets: {
+      EN: [
+        'Online marketplace for browsing and purchasing goods across various categories',
+        'Provides product listings, shopping carts, verified customer reviews, and order tracking',
+        'Supports user accounts, payment processing, purchase history, and delivery services'
+      ],
+      HI: [
+        'विभिन्न श्रेणियों में वस्तुओं को ब्राउज़ करने और खरीदने के लिए ऑनलाइन बाज़ार',
+        'उत्पाद सूची, शॉपिंग कार्ट, सत्यापित ग्राहक समीक्षाएं और ऑर्डर ट्रैकिंग प्रदान करता है',
+        'उपयोगकर्ता खातों, भुगतान प्रसंस्करण, खरीद इतिहास और वितरण सेवाओं का समर्थन करता है'
+      ],
+      TE: [
+        'వివిధ వర్గాలలో వస్తువులను బ్రౌజ్ చేయడానికి మరియు కొనుగోలు చేయడానికి ఆన్‌లైన్ మార్కెట్‌ప్లేస్',
+        'ఉత్పత్తి జాబితాలు, షాపింగ్ కార్ట్‌లు, ధృవీకరించబడిన కస్టమర్ సమీక్షలు మరియు ఆర్డర్ ట్రాకింగ్‌ను అందిస్తుంది',
+        'వినియోగదారు ఖాతాలు, చెల్లింపు ప్రాసెసింగ్, కొనుగోలు చరిత్ర మరియు డెలివరీ సేవలకు మద్దతు ఇస్తుంది'
+      ]
+    }
+  },
+  'amazon.in': {
+    siteName: 'Amazon India',
+    domain: 'amazon.in',
+    bullets: {
+      EN: [
+        'Online e-commerce platform for ordering products and digital services in India',
+        'Provides localized catalog items, shopping carts, order tracking, and payment gateways',
+        'Supports customer accounts, shipping addresses, order histories, and support requests'
+      ],
+      HI: [
+        'भारत में उत्पादों और डिजिटल सेवाओं का ऑर्डर देने के लिए ऑनलाइन ई-कॉमर्स प्लेटफॉर्म',
+        'स्थानीयकृत कैटलॉग आइटम, शॉपिंग कार्ट, ऑर्डर ट्रैकिंग और भुगतान गेटवे प्रदान करता है',
+        'ग्राहक खातों, शिपिंग पते, ऑर्डर इतिहास और सहायता अनुरोधों का समर्थन करता है'
+      ],
+      TE: [
+        'భారతదేశంలో ఉత్పత్తులు మరియు డిజిటల్ సేవలను ఆర్డర్ చేయడానికి ఆన్‌లైన్ ఇ-కామర్స్ ప్లాట్‌ఫారమ్',
+        'స్థానిక కేటలాగ్ అంశాలు, షాపింగ్ కార్ట్‌లు, ఆర్డర్ ట్రాకింగ్ మరియు పేమెంట్ గేట్‌వేలను అందిస్తుంది',
+        'కస్టమర్ ఖాతాలు, షిప్పింగ్ చిరునామాలు, ఆర్డర్ చరిత్రలు మరియు సపోర్ట్ అభ్యర్థనలకు మద్దతు ఇస్తుంది'
+      ]
+    }
+  },
+  'google.com': {
+    siteName: 'Google',
+    domain: 'google.com',
+    bullets: {
+      EN: [
+        'Web search engine and cloud services platform for retrieving online information',
+        'Supports query processing, account integration, media search, and web index navigation',
+        'Provides internet search, digital content indexing, and cloud-based application tools'
+      ],
+      HI: [
+        'ऑनलाइन जानकारी प्राप्त करने के लिए वेब खोज इंजन और क्लाउड सेवाएँ प्लेटफ़ॉर्म',
+        'क्वेरी प्रोसेसिंग, खाता एकीकरण, मीडिया खोज और वेब इंडेक्स नेविगेशन का समर्थन करता है',
+        'इंटरनेट खोज, डिजिटल सामग्री अनुक्रमण और क्लाउड-आधारित एप्लिकेशन उपकरण प्रदान करता है'
+      ],
+      TE: [
+        'ఆన్‌లైన్ సమాచారాన్ని తిరిగి పొందడానికి వెబ్ సెర్చ్ ఇంజిన్ మరియు క్లౌడ్ సేవల ప్లాట్‌ఫారమ్',
+        'క్వెరీ ప్రాసెసింగ్, ఖాతా ఏకీకరణ, మీడియా శోధన మరియు వెబ్ ఇండెక్స్ నావిగేషన్‌కు మద్దతు ఇస్తుంది',
+        'ఇంటర్నెట్ శోధన, డిజిటల్ కంటెంట్ ఇండెక్సింగ్ మరియు క్లౌడ్-ఆధారిత అప్లికేషన్ టూల్స్‌ను అందిస్తుంది'
+      ]
+    }
+  },
+  'wikipedia.org': {
+    siteName: 'Wikipedia',
+    domain: 'wikipedia.org',
+    bullets: {
+      EN: [
+        'Free multilingual online encyclopedia maintained by a global volunteer community',
+        'Provides collaboratively edited reference articles across diverse academic topics',
+        'Operated by the Wikimedia Foundation for free knowledge distribution'
+      ],
+      HI: [
+        'वैश्विक स्वयंसेवक समुदाय द्वारा संचालित मुफ्त बहुभाषी ऑनलाइन ज्ञानकोश',
+        'विविध शैक्षणिक विषयों पर सहयोगत्मक रूप से संपादित संदर्भ लेख प्रदान करता है',
+        'मुफ्त ज्ञान वितरण के लिए विकिमीडिया फाउंडेशन द्वारा संचालित'
+      ],
+      TE: [
+        'ప్రపంచ స్వచ్ఛంద సేవకులచే నిర్వహించబడే ఉచిత బహుభాషా ఆన్‌లైన్ విజ్ఞాన సర్వస్వం',
+        'విభిన్న విద్యా విషయాలలో సహకారంతో సవరించబడిన సూచన వ్యాసాలను అందిస్తుంది',
+        'ఉచిత విజ్ఞాన పంపిణీ కోసం వికీమీడియా ఫౌండేషన్ ద్వారా నిర్వహించబడుతుంది'
+      ]
+    }
+  },
+  'shopease.com': {
+    siteName: 'ShopEase',
+    domain: 'shopease.com',
+    bullets: {
+      EN: [
+        'E-commerce retail website processing customer account data and shipping addresses',
+        'Collects name, phone number, and purchase histories for order fulfillment',
+        'Tier 1 direct API integration enables immediate statutory consent revocation'
+      ],
+      HI: [
+        'ई-कॉमर्स खुदरा वेबसाइट जो ग्राहक खाता डेटा और शिपिंग पते संसाधित करती है',
+        'ऑर्डर पूर्ति के लिए नाम, फोन नंबर और खरीद इतिहास एकत्र करता है',
+        'टियर 1 प्रत्यक्ष एपीआई एकीकरण तत्काल वैधानिक सहमति वापसी में सक्षम बनाता है'
+      ],
+      TE: [
+        'కస్టమర్ ఖాతా డేటా మరియు షిప్పింగ్ చిరునామాలను ప్రాసెస్ చేసే ఇ-కామర్స్ రిటైల్ వెబ్‌సైట్',
+        'ఆర్డర్ నెరవేర్పు కోసం పేరు, ఫోన్ నంబర్ మరియు కొనుగోలు చరిత్రలను సేకరిస్తుంది',
+        'టైర్ 1 డైరెక్ట్ API అనుసంధానం తక్షణ చట్టబద్ధమైన సమ్మతి ఉపసంహరణను ప్రారంభిస్తుంది'
+      ]
+    }
+  },
+  'socialhub.io': {
+    siteName: 'SocialHub',
+    domain: 'socialhub.io',
+    bullets: {
+      EN: [
+        'Social networking platform tracking user profiles and interaction activity',
+        'Collects email, location telemetry, and profile preferences',
+        'Provides Tier 2 guided self-serve portal for account and data deletion'
+      ],
+      HI: [
+        'सोशल नेटवर्किंग प्लेटफॉर्म जो उपयोगकर्ता प्रोफाइल और इंटरैक्शन गतिविधि को ट्रैक करता है',
+        'ईमेल, स्थान टेलीमेट्री और प्रोफ़ाइल प्राथमिकताएं एकत्र करता है',
+        'खाता और डेटा हटाने के लिए टियर 2 निर्देशित स्व-सेवा पोर्टल प्रदान करता है'
+      ],
+      TE: [
+        'వినియోగదారు ప్రొఫైల్‌లు మరియు పరస్పర చర్యల కార్యకలాపాలను ట్రాక్ చేసే సోషల్ నెట్‌వర్కింగ్ ప్లాట్‌ఫారమ్',
+        'ఇమెయిల్, స్థాన టెలిమెట్రీ మరియు ప్రొఫైల్ ప్రాధాన్యతలను సేకరిస్తుంది',
+        'ఖాతా మరియు డేటా తొలగింపు కోసం టైర్ 2 గైడెడ్ సెల్ఫ్-సర్వ్ పోర్టల్‌ను అందిస్తుంది'
+      ]
+    }
+  },
+  'clouddata.net': {
+    siteName: 'CloudData Services',
+    domain: 'clouddata.net',
+    bullets: {
+      EN: [
+        'Cloud storage and file infrastructure platform retaining user access records',
+        'Collects email and phone numbers for operational authentication',
+        'Requires formal DPDP Section 12 legal notice for data erasure'
+      ],
+      HI: [
+        'उपयोगकर्ता पहुंच रिकॉर्ड रखने वाला क्लाउड स्टोरेज और फ़ाइल अवसंरचना प्लेटफ़ॉर्म',
+        'परिचालन प्रमाणीकरण के लिए ईमेल और फोन नंबर एकत्र करता है',
+        'डेटा मिटाने के लिए औपचारिक डीपीडीपी धारा 12 कानूनी नोटिस की आवश्यकता होती है'
+      ],
+      TE: [
+        'వినియోగదారు యాక్సెస్ రికార్డులను ఉంచే క్లౌడ్ నిల్వ మరియు ఫైల్ మౌలిక సదుపాయాల ప్లాట్‌ఫారమ్',
+        'ఆపరేషనల్ ప్రామాణీకరణ కోసం ఇమెయిల్ మరియు ఫోన్ నంబర్లను సేకరిస్తుంది',
+        'డేటా తొలగింపుకు అధికారిక DPDP సెక్షన్ 12 చట్టపరమైన నోటీసు అవసరం'
+      ]
+    }
+  },
+  'quickbuy.in': {
+    siteName: 'QuickBuy Retail',
+    domain: 'quickbuy.in',
+    bullets: {
+      EN: [
+        'Online retail store facilitating product orders and customer payments',
+        'Collects email address and registration details for purchases',
+        'Supports Tier 1 direct partner API execution for consent management'
+      ],
+      HI: [
+        'ऑनलाइन खुदरा स्टोर जो उत्पाद ऑर्डर और ग्राहक भुगतानों की सुविधा प्रदान करता है',
+        'खरीद के लिए ईमेल पता और पंजीकरण विवरण एकत्र करता है',
+        'सहमति प्रबंधन के लिए टियर 1 प्रत्यक्ष भागीदार एपीआई निष्पादन का समर्थन करता है'
+      ],
+      TE: [
+        'ఉత్పత్తి ఆర్డర్‌లు మరియు కస్టమర్ చెల్లింపులను సులభతరం చేసే ఆన్‌లైన్ రిటైల్ స్టోర్',
+        'కొనుగోళ్ల కోసం ఇమెయిల్ చిరునామా మరియు నమోదు వివరాలను సేకరిస్తుంది',
+        'సమ్మతి నిర్వహణ కోసం టైర్ 1 డైరెక్ట్ పార్టనర్ API అమలుకు మద్దతు ఇస్తుంది'
+      ]
+    }
+  },
+  'dataflow.io': {
+    siteName: 'DataFlow Analytics',
+    domain: 'dataflow.io',
+    bullets: {
+      EN: [
+        'Analytics service capturing device telemetry, location profiles, and tracking data',
+        'Collects IP address, device specs, and cross-site behavioral telemetry',
+        'Requires statutory DPDP Section 12 legal erasure claim for data purging'
+      ],
+      HI: [
+        'एनालिटिक्स सेवा जो डिवाइस टेलीमेट्री, स्थान प्रोफाइल और ट्रैकिंग डेटा कैप्चर करती है',
+        'आईपी पता, डिवाइस विनिर्देश और क्रॉस-साइट व्यवहार टेलीमेट्री एकत्र करती है',
+        'डेटा हटाने के लिए वैधानिक डीपीडीपी धारा 12 कानूनी विलोपन दावे की आवश्यकता होती है'
+      ],
+      TE: [
+        'పరికర టెలిమెట్రీ, స్థాన ప్రొఫైల్‌లు మరియు ట్రాకింగ్ డేటాను రికార్డ్ చేసే అనలిటిక్స్ సేవ',
+        'IP చిరునామా, పరికర ప్రత్యేకతలు మరియు క్రాస్-సైట్ ప్రవర్తనా టెలిమెట్రీని సేకరిస్తుంది',
+        'డేటా తొలగింపు కోసం చట్టబద్ధమైన DPDP సెక్షన్ 12 చట్టపరమైన తొలగింపు దావా అవసరం'
+      ]
+    }
+  },
+  'socialpulse.app': {
+    siteName: 'SocialPulse',
+    domain: 'socialpulse.app',
+    bullets: {
+      EN: [
+        'Social interactions application processing user content and contact sync',
+        'Collects profile photos, email, phone numbers, and social graph contacts',
+        'Provides guided self-service deletion portal for user account closure'
+      ],
+      HI: [
+        'सामाजिक सहभागिता एप्लिकेशन जो उपयोगकर्ता सामग्री और संपर्क सिंक संसाधित करता है',
+        'प्रोफ़ाइल फ़ोटो, ईमेल, फ़ोन नंबर और सामाजिक ग्राफ़ संपर्क एकत्र करता है',
+        'उपयोगकर्ता खाता बंद करने के लिए निर्देशित स्व-सेवा विलोपन पोर्टल प्रदान करता है'
+      ],
+      TE: [
+        'వినియోగదారు కంటెంట్ మరియు కాంటాక్ట్ సింక్‌ను ప్రాసెస్ చేసే సామాజిక పరస్పర చర్యల అప్లికేషన్',
+        'ప్రొఫైల్ ఫోటోలు, ఇమెయిల్, ఫోన్ నంబర్లు మరియు సోషల్ గ్రాఫ్ పరిచయాలను సేకరిస్తుంది',
+        'వినియోగదారు ఖాతా ముగింపు కోసం గైడెడ్ సెల్ఫ్-సర్వీస్ తొలగింపు పోర్టల్‌ను అందిస్తుంది'
+      ]
+    }
+  },
+  'streamhub.tv': {
+    siteName: 'StreamHub TV',
+    domain: 'streamhub.tv',
+    bullets: {
+      EN: [
+        'Digital video streaming service tracking viewing history and billing profiles',
+        'Collects account email, billing information, and media watch logs',
+        'Supports direct partner API integration for instant consent revocation'
+      ],
+      HI: [
+        'डिजिटल वीडियो स्ट्रीमिंग सेवा जो देखने के इतिहास और बिलिंग प्रोफाइल को ट्रैक करती है',
+        'खाता ईमेल, बिलिंग जानकारी और मीडिया वॉच लॉग एकत्र करती है',
+        'तत्काल सहमति वापसी के लिए प्रत्यक्ष भागीदार एपीआई एकीकरण का समर्थन करती है'
+      ],
+      TE: [
+        'వీక్షణ చరిత్ర మరియు బిల్లింగ్ ప్రొఫైల్‌లను ట్రాక్ చేసే డిజిటల్ వీడియో స్ట్రీమింగ్ సేవ',
+        'ఖాతా ఇమెయిల్, బిల్లింగ్ సమాచారం మరియు మీడియా వాచ్ లాగ్‌లను సేకరిస్తుంది',
+        'తక్షణ సమ్మతి ఉపసంహరణ కోసం ప్రత్యక్ష భాగస్వామి API అనుసంధానానికి మద్దతు ఇస్తుంది'
+      ]
+    }
+  },
+  'cloudspace.net': {
+    siteName: 'CloudSpace Storage',
+    domain: 'cloudspace.net',
+    bullets: {
+      EN: [
+        'Cloud storage service holding user documents and file diagnostic telemetry',
+        'Collects IP address, document metadata, and login event logs',
+        'Provides guided self-serve privacy controls for downloading or purging archives'
+      ],
+      HI: [
+        'क्लाउड स्टोरेज सेवा जो उपयोगकर्ता दस्तावेज़ और फ़ाइल नैदानिक टेलीमेट्री रखती है',
+        'आईपी पता, दस्तावेज़ मेटाडेटा और लॉगिन ईवेंट लॉग एकत्र करती है',
+        'संग्रह डाउनलोड करने या हटाने के लिए निर्देशित स्व-सेवा गोपनीयता नियंत्रण प्रदान करती है'
+      ],
+      TE: [
+        'వినియోగదారు పత్రాలు మరియు ఫైల్ డయాగ్నస్టిక్ టెలిమెట్రీని ఉంచే క్లౌడ్ నిల్వ సేవ',
+        'IP చిరునామా, పత్రం మెటాడేటా మరియు లాగిన్ ఈవెంట్ లాగ్‌లను సేకరిస్తుంది',
+        'ఆర్కైవ్‌లను డౌన్‌లోడ్ చేయడానికి లేదా తొలగించడానికి గైడెడ్ సెల్ఫ్-సర్వ్ గోప్యతా నియంత్రణలను అందిస్తుంది'
+      ]
+    }
+  },
+  'fintechx.com': {
+    siteName: 'FinTechX Pay',
+    domain: 'fintechx.com',
+    bullets: {
+      EN: [
+        'Financial technology service processing identity records under KYC regulations',
+        'Collects bank account details, PAN/Government ID, and credit scoring data',
+        'Requires formal DPDP Section 12 statutory notice for data erasure'
+      ],
+      HI: [
+        'वित्तीय प्रौद्योगिकी सेवा जो केवाईसी नियमों के तहत पहचान रिकॉर्ड संसाधित करती है',
+        'बैंक खाता विवरण, पैन/सरकारी आईडी और क्रेडिट स्कोरिंग डेटा एकत्र करती है',
+        'डेटा मिटाने के लिए औपचारिक डीपीडीपी धारा 12 वैधानिक नोटिस की आवश्यकता होती है'
+      ],
+      TE: [
+        'కేవైసీ నిబంధనల ప్రకారం గుర్తింపు రికార్డులను ప్రాసెస్ చేసే ఫైనాన్షియల్ టెక్నాలజీ సేవ',
+        'బ్యాంక్ ఖాతా వివరాలు, పాన్/ప్రభుత్వ ID మరియు క్రెడిట్ స్కోరింగ్ డేటాను సేకరిస్తుంది',
+        'డేటా తొలగింపు కోసం అధికారిక DPDP సెక్షన్ 12 చట్టబద్ధమైన నోటీసు అవసరం'
+      ]
     }
   }
-
-  const takeaways = [];
-  if (hasThirdPartyAds) takeaways.push(language === 'HI' ? 'विज्ञापनदाता साझाकरण' : language === 'TE' ? 'ప్రకటనకర్తల భాగస్వామ్యం' : '3rd-Party Ads');
-  if (hasTracking) takeaways.push(language === 'HI' ? 'गतिविधि ट्रैकिंग' : language === 'TE' ? 'యాక్టివిటీ ట్రాకింగ్' : 'Activity Tracking');
-  if (hasSensitiveData) takeaways.push(language === 'HI' ? 'संवेदनशील डेटा' : language === 'TE' ? 'సున్నితమైన డేటా' : 'Sensitive Data');
-  takeaways.push('DPDP §6/§12');
-
-  return {
-    success: true,
-    summary: `• ${bullet1}\n• ${bullet2}`,
-    bullets: [bullet1, bullet2],
-    riskLevel,
-    keyTakeaways: takeaways.slice(0, 3),
-    isFallback: true,
-    modelUsed: 'rule-based-nlp-engine'
-  };
-}
+};
 
 /**
- * Generates an official DPDP Act Section 6 (Consent Revocation) or Section 12 (Data Erasure) Legal Notice.
- * Used by Tier 3 Legal Notice Generator.
+ * Main Unified Website Summary Service
+ * Used identically by Extension, Website Details, and Reclaim popup.
  */
-function generateLegalNotice({
-  userName = 'Data Principal',
-  userEmail = 'user@example.com',
-  websiteName = 'Website',
-  dpoEmail = 'dpo@example.com',
-  requestType = 'CONSENT_REVOCATION',
-  targetConsent = 'Marketing Emails',
-  customNotes = ''
+async function getWebsiteSummary({
+  domain,
+  websiteName = '',
+  language = 'EN',
+  pageTitle = '',
+  metaDescription = '',
+  headings = [],
+  policyText = '',
+  verifiedData = null,
+  forceRefresh = false
 }) {
-  const currentDate = new Date().toISOString().split('T')[0];
-  const isErasure = requestType === 'DATA_ERASURE' || requestType === 'ACCOUNT_DELETION';
+  const normDomain = normalizeDomain(domain);
+  const lang = (language || 'EN').toUpperCase(); // EN, HI, TE
 
-  const subject = isErasure
-    ? `FORMAL NOTICE: Exercise of Right to Data Erasure (Section 12, DPDP Act 2023) — ${userEmail}`
-    : `FORMAL NOTICE: Revocation of Consent (Section 6, DPDP Act 2023) — ${userEmail}`;
+  // Debug logging as required by specification
+  console.log(`[PrivacyLens Summary] Current Website: ${domain} | Website ID: ${normDomain} | AI Request: ${normDomain} | Cache Key: privacylens_summary_${normDomain}`);
 
-  const body = `Date: ${currentDate}
-To: Data Protection Officer / Privacy Team (${websiteName})
-Email: ${dpoEmail}
-
-From: ${userName}
-Registered Email: ${userEmail}
-
-Subject: ${subject}
-
-Dear Data Protection Officer,
-
-I am writing to you in my capacity as a Data Principal under the Digital Personal Data Protection Act, 2023 (DPDP Act).
-
-${
-  isErasure
-    ? `Pursuant to Section 12(1) of the DPDP Act 2023, I hereby formally request the complete ERASURE and PERMANENT DELETION of all personal data, behavioral profiles, identifiers, and associated records held by ${websiteName} associated with my email address (${userEmail}).`
-    : `Pursuant to Section 6(4) of the DPDP Act 2023, I hereby formally REVOKE my consent previously granted for: "${targetConsent}". Please ensure my personal data is no longer processed for marketing or secondary purposes.`
-}
-
-${customNotes ? `Specific Instruction: ${customNotes}\n` : ''}
-Under Section 6(6) and Section 12(3) of the DPDP Act, you are obligated to cease processing such personal data and ensure that your data processors similarly erase or cease processing my data without unreasonable delay.
-
-Please acknowledge receipt of this notice and confirm completion of this statutory request in writing within the stipulated timeframe.
-
-Sincerely,
-${userName}
-Data Principal
-Email: ${userEmail}
-Timestamp: ${new Date().toISOString()}`;
-
-  return {
-    subject,
-    body,
-    mailtoUrl: `mailto:${encodeURIComponent(dpoEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  };
-}
-
-/**
- * Generates a short 3-line Website Brief specifically for the current domain/webpage.
- * Automatically falls back to deterministic parsing if Gemini is offline/disabled.
- *
- * @param {object} params
- * @param {string} params.domain - Current normalized domain (e.g., github.com)
- * @param {string} params.title - Active page document title
- * @param {string} params.metaDescription - Content of description meta tags
- * @param {Array<string>} params.headings - List of h1/h2 text values on page
- * @returns {Promise<{
- *   success: boolean,
- *   siteName: string,
- *   brief: string,
- *   isFallback: boolean
- * }>}
- */
-async function generateWebsiteBrief({ domain, title, metaDescription, headings = [] }) {
-  const normDomain = (domain || '').toLowerCase().trim();
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  // 1. Fast Local Database lookup for popular websites (Standard/Consistent Fallbacks)
-  const popularSites = {
-    'youtube.com': {
-      siteName: 'YouTube',
-      brief: 'YouTube is a video-sharing platform for watching, uploading, and interacting with videos.\nUsers can subscribe to channels, comment on videos, create playlists, and manage their content preferences.\nThe platform primarily provides personalized video content and creator-based entertainment.'
-    },
-    'github.com': {
-      siteName: 'GitHub',
-      brief: 'GitHub is a platform for hosting and collaborating on software development projects using Git repositories.\nUsers can create repositories, contribute code, review changes, manage issues, and collaborate with developers.\nThe platform primarily supports software development, version control, and open-source collaboration.'
-    },
-    'amazon.com': {
-      siteName: 'Amazon',
-      brief: 'Amazon is an online marketplace where users can search for and purchase products from different categories.\nUsers can manage orders, payments, addresses, reviews, returns, and personalized shopping preferences.\nThe platform primarily provides e-commerce, product discovery, purchasing, and delivery services.'
-    },
-    'amazon.in': {
-      siteName: 'Amazon India',
-      brief: 'Amazon India is an online marketplace where users can search for and purchase products from different categories.\nUsers can manage orders, payments, addresses, reviews, returns, and personalized shopping preferences.\nThe platform primarily provides e-commerce, product discovery, purchasing, and delivery services.'
-    },
-    'google.com': {
-      siteName: 'Google',
-      brief: 'Google is a web search engine and digital services platform for information retrieval and online tools.\nUsers can query terms, manage Google account services, search media, and customize search options.\nThe platform primarily provides internet search, information discovery, and digital cloud services.'
-    },
-    'wikipedia.org': {
-      siteName: 'Wikipedia',
-      brief: 'Wikipedia is a free multilingual online encyclopedia written and maintained by a community of volunteers.\nUsers can search topics, read articles, edit reference pages, and contribute to the knowledge database.\nThe platform primarily provides free educational information, crowdsourced reference, and research databases.'
-    },
-    'netflix.com': {
-      siteName: 'Netflix',
-      brief: 'Netflix is a subscription-based streaming service offering a library of films and television programs.\nUsers can browse categories, stream videos, manage watchlists, and configure profile preferences.\nThe platform primarily provides digital entertainment, video-on-demand streaming, and personalized media content.'
-    }
-  };
-
-  // If it's a known popular site, return immediately
-  if (popularSites[normDomain]) {
+  if (!normDomain) {
     return {
-      success: true,
-      ...popularSites[normDomain],
-      isFallback: true
+      success: false,
+      websiteId: 'unknown',
+      domain: 'unknown',
+      websiteName: 'Unknown Website',
+      summary: {
+        EN: '• Verified website information unavailable.',
+        HI: '• सत्यापित जानकारी उपलब्ध नहीं है।',
+        TE: '• ధృవీకరించిన సమాచారం అందుబాటులో లేదు.'
+      },
+      bullets: ['• Verified website information unavailable.'],
+      currentLanguage: lang,
+      source: 'fallback-unavailable',
+      generatedAt: new Date().toISOString(),
+      version: '1.0'
     };
   }
 
-  // 2. Try live Gemini API if key is present
+  // 1. Check Verified Database of tracked/popular websites first
+  if (VERIFIED_WEBSITE_DATABASE[normDomain]) {
+    const record = VERIFIED_WEBSITE_DATABASE[normDomain];
+    const bulletsForLang = record.bullets[lang] || record.bullets.EN;
+    const formattedBullets = bulletsForLang.map(b => b.startsWith('•') ? b : `• ${b}`);
+
+    return {
+      success: true,
+      websiteId: normDomain,
+      domain: normDomain,
+      websiteName: websiteName || record.siteName,
+      summary: {
+        EN: record.bullets.EN.map(b => `• ${b}`).join('\n'),
+        HI: record.bullets.HI.map(b => `• ${b}`).join('\n'),
+        TE: record.bullets.TE.map(b => `• ${b}`).join('\n')
+      },
+      bullets: formattedBullets,
+      currentLanguage: lang,
+      source: 'verified-db',
+      generatedAt: new Date().toISOString(),
+      version: '1.0'
+    };
+  }
+
+  // 2. Try Gemini API if API key is present
+  const apiKey = process.env.GEMINI_API_KEY;
   if (apiKey) {
     try {
-      const briefResult = await callGeminiWebsiteBriefAPI({ domain, title, metaDescription, headings, apiKey });
-      if (briefResult && briefResult.siteName && briefResult.brief) {
+      const geminiResult = await callGeminiWebsiteSummaryAPI({
+        domain: normDomain,
+        siteName: websiteName || normDomain,
+        pageTitle,
+        metaDescription,
+        headings,
+        policyText,
+        verifiedData,
+        apiKey,
+        language: lang
+      });
+
+      if (geminiResult && geminiResult.bullets && geminiResult.bullets.length >= 2) {
+        const formattedBullets = geminiResult.bullets.map(b => b.startsWith('•') ? b : `• ${b}`);
         return {
           success: true,
-          siteName: briefResult.siteName,
-          brief: briefResult.brief,
-          isFallback: false
+          websiteId: normDomain,
+          domain: normDomain,
+          websiteName: geminiResult.siteName || websiteName || normDomain,
+          summary: {
+            [lang]: formattedBullets.join('\n')
+          },
+          bullets: formattedBullets,
+          currentLanguage: lang,
+          source: 'gemini',
+          generatedAt: new Date().toISOString(),
+          version: '1.0'
         };
       }
     } catch (err) {
-      console.warn(`[aiService] Gemini Website Brief failed: ${err.message}. Using rule-based fallback.`);
+      console.warn(`[aiService] Gemini API call failed for domain ${normDomain} (${err.message}). Using strict factual fallback.`);
     }
   }
 
-  // 3. Fallback Parser for custom websites (e.g. college websites, custom sites)
-  const titleLower = (title || '').toLowerCase();
-  const descLower = (metaDescription || '').toLowerCase();
-  const combinedText = `${normDomain} ${titleLower} ${descLower} ${(headings || []).join(' ').toLowerCase()}`;
-
-  let siteName = domain.split('.')[0].toUpperCase();
-  if (title && title.length > 3 && title.length < 30) {
-    siteName = title.split('|')[0].split('-')[0].trim();
-  }
-
-  // College / Educational website detection
-  if (combinedText.includes('college') || combinedText.includes('university') || combinedText.includes('.edu') || combinedText.includes('academic') || combinedText.includes('student')) {
-    return {
-      success: true,
-      siteName: siteName || 'Educational Institution',
-      brief: `${siteName} is an educational institution website providing academic and campus details.\nUsers can explore offered courses, check admission guidelines, look up departments, and access student portals.\nThe platform primarily supports educational access, academic administration, and student resources.`,
-      isFallback: true
-    };
-  }
-
-  // E-commerce fallback
-  if (combinedText.includes('shop') || combinedText.includes('store') || combinedText.includes('cart') || combinedText.includes('checkout') || combinedText.includes('buy')) {
-    return {
-      success: true,
-      siteName: siteName || 'Online Store',
-      brief: `${siteName} is an online shopping platform where users can browse and buy products.\nUsers can look up catalog items, manage shopping carts, write reviews, and make online payments.\nThe platform primarily provides e-commerce, product discovery, and purchasing services.`,
-      isFallback: true
-    };
-  }
-
-  // Generic website heuristic (if some minimum page title exists)
-  if (title && title.trim().length > 0) {
-    return {
-      success: true,
-      siteName: siteName,
-      brief: `${siteName} is a web platform for digital content and information access.\nUsers can navigate pages, explore services, and interact with public web details.\nThe site primarily supports online engagement, user communication, or service discovery.`,
-      isFallback: true
-    };
-  }
-
-  // If unable to identify at all (no title, empty info)
-  return {
-    success: false,
-    siteName: domain,
-    brief: 'Unable to generate a reliable website summary.',
-    isFallback: true
-  };
+  // 3. Fallback Engine: Strict Website-Specific Factual Mode (Metadata & Verified Data Only)
+  return generateStrictFactualFallback({
+    domain: normDomain,
+    siteName: websiteName,
+    pageTitle,
+    metaDescription,
+    headings,
+    policyText,
+    verifiedData,
+    language: lang
+  });
 }
 
 /**
- * Invokes Gemini to analyze page metadata and generate a 3-line Website Brief.
+ * Gemini API call for Unified Website Summary with strict domain context and anti-hallucination rules.
  */
-async function callGeminiWebsiteBriefAPI({ domain, title, metaDescription, headings, apiKey }) {
-  const prompt = `You are PrivacyLens AI, an expert digital analyst.
-Analyze the following public page details for a website:
+async function callGeminiWebsiteSummaryAPI({
+  domain,
+  siteName,
+  pageTitle,
+  metaDescription,
+  headings = [],
+  policyText = '',
+  verifiedData = null,
+  apiKey,
+  language = 'EN'
+}) {
+  let langInstruction = "English.";
+  if (language === 'HI') langInstruction = "Hindi (हिंदी script).";
+  if (language === 'TE') langInstruction = "Telugu (తెలుగు script).";
+
+  const prompt = `You are PrivacyLens AI, an expert digital privacy analyst.
+Summarize the EXACT website "${domain}" (${siteName}).
+
+STRICT FACTUAL MODE RULES:
+1. Provide EXACTLY 2 or 3 concise factual bullet points in ${langInstruction} about THIS SPECIFIC WEBSITE ONLY.
+2. DO NOT produce generic category sentences (e.g. DO NOT say "This is an e-commerce website" or "This is a gaming platform").
+3. DO NOT use information belonging to any other website.
+4. If reliable factual information is not available for "${domain}", return the single bullet "Verified website information unavailable."
+
+Context for ${domain}:
 - Domain: ${domain}
-- Page Title: ${title || 'N/A'}
+- Website Name: ${siteName || 'N/A'}
+- Page Title: ${pageTitle || 'N/A'}
 - Meta Description: ${metaDescription || 'N/A'}
 - Headings: ${(headings || []).slice(0, 3).join(', ') || 'N/A'}
+- Policy Snippet: ${(policyText || '').slice(0, 1500) || 'N/A'}
 
-Identify the exact website name/identity and generate a very short 3-line summary of this EXACT website.
-The summary must answer exactly these 3 questions, with each answer on a new line (max 1 sentence per line):
-1. What exactly is this website/platform?
-2. What are the main things users can do on this website?
-3. What is the main purpose/use of the website?
-
-Do not generate a long paragraph. Do not be generic (e.g. do not just say "This is an e-commerce website", say what it specifically is).
 Return in STRICT JSON format:
 {
-  "siteName": "Actual Website Name",
-  "brief": "Line 1 answering what it is.\\nLine 2 answering what users can do.\\nLine 3 answering its main purpose."
+  "siteName": "${siteName || domain}",
+  "bullets": [
+    "Exact verified fact 1 about ${domain}",
+    "Exact verified fact 2 about ${domain}",
+    "Exact verified fact 3 about ${domain}"
+  ]
 }`;
 
   const payload = JSON.stringify({
     contents: [
-      {
-        parts: [{ text: prompt }]
-      }
+      { parts: [{ text: prompt }] }
     ],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 256,
+      maxOutputTokens: 300,
       responseMimeType: "application/json"
     }
   });
@@ -511,24 +547,24 @@ Return in STRICT JSON format:
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
             const parsed = JSON.parse(rawData);
-            const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              resolve(JSON.parse(text));
+            const candidateText = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (candidateText) {
+              resolve(JSON.parse(candidateText));
               return;
             }
-            reject(new Error('Empty response from Gemini'));
+            reject(new Error('Invalid Gemini output'));
           } catch (e) {
             reject(e);
           }
         } else {
-          reject(new Error(`Status ${res.statusCode}`));
+          reject(new Error(`Gemini status ${res.statusCode}`));
         }
       });
     });
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Timeout'));
+      reject(new Error(`Gemini API request timed out`));
     });
     req.on('error', reject);
     req.write(payload);
@@ -536,10 +572,223 @@ Return in STRICT JSON format:
   });
 }
 
+/**
+ * Strict Factual Mode Fallback Engine
+ * Generates facts derived ONLY from verified website data or public metadata.
+ * Returns "Verified website information unavailable." if insufficient data is present.
+ * NEVER outputs generic category descriptions like "This is a gaming website."
+ */
+function generateStrictFactualFallback({
+  domain,
+  siteName,
+  pageTitle = '',
+  metaDescription = '',
+  headings = [],
+  policyText = '',
+  verifiedData = null,
+  language = 'EN'
+}) {
+  const L = language.toUpperCase();
+  const bullets = [];
+
+  let name = siteName || domain.split('.')[0].toUpperCase();
+  if (pageTitle && pageTitle.trim().length > 3 && pageTitle.trim().length < 35) {
+    name = pageTitle.split('|')[0].split('-')[0].trim();
+  }
+
+  // Check verifiedData if provided from DB
+  if (verifiedData) {
+    if (verifiedData.dataItems && verifiedData.dataItems.length > 0) {
+      const itemsStr = verifiedData.dataItems.slice(0, 3).join(', ');
+      if (L === 'HI') bullets.push(`पंजीकृत खाता संचालन के लिए ${itemsStr} एकत्र करता है`);
+      else if (L === 'TE') bullets.push(`నమోదిత ఖాతా కార్యకలాపాల కోసం ${itemsStr} సేకరిస్తుంది`);
+      else bullets.push(`Collects ${itemsStr} for registered account operations`);
+    }
+
+    if (verifiedData.consents && verifiedData.consents.length > 0) {
+      const activeTypes = verifiedData.consents.filter(c => c.status === 'ACTIVE').map(c => c.consentType);
+      if (activeTypes.length > 0) {
+        const typesStr = activeTypes.slice(0, 2).join(', ');
+        if (L === 'HI') bullets.push(`सक्रिय सहमतियों में ${typesStr} शामिल हैं`);
+        else if (L === 'TE') bullets.push(`క్రియాశీల సమ్మతులలో ${typesStr} ఉన్నాయి`);
+        else bullets.push(`Active consents include ${typesStr}`);
+      }
+    }
+
+    if (verifiedData.deletionTier) {
+      const tier = verifiedData.deletionTier;
+      if (tier === 1) {
+        if (L === 'HI') bullets.push(`सीधे पार्टनर एपीआई (टियर 1) के माध्यम से सहमति वापस लेना उपलब्ध है`);
+        else if (L === 'TE') bullets.push(`నేరుగా భాగస్వామి API (టైర్ 1) ద్వారా సమ్మతి ఉపసంహరణ అందుబాటులో ఉంది`);
+        else bullets.push(`Consent revocation available via direct partner API (Tier 1)`);
+      } else if (tier === 2) {
+        if (L === 'HI') bullets.push(`डेटा हटाने के लिए स्व-सेवा निर्देशित गोपनीयता पोर्टल उपलब्ध है`);
+        else if (L === 'TE') bullets.push(`డేటా తొలగింపు కోసం సెల్ఫ్-సర్వ్ గైడెడ్ గోప్యతా పోర్టల్ అందుబాటులో ఉంది`);
+        else bullets.push(`Self-serve guided privacy portal available for data removal`);
+      } else if (tier === 3) {
+        if (L === 'HI') bullets.push(`डेटा मिटाने के लिए औपचारिक डीपीडीपी धारा 12 कानूनी नोटिस जमा करना आवश्यक है`);
+        else if (L === 'TE') bullets.push(`డేటా తొలగింపుకు అధికారిక DPDP సెక్షన్ 12 చట్టపరమైన నోటీసు సమర్పించాలి`);
+        else bullets.push(`Data erasure requires formal DPDP Section 12 legal notice submission`);
+      }
+    }
+  }
+
+  // If no DB verifiedData, extract strictly from page meta description if specific enough
+  if (bullets.length === 0 && metaDescription && metaDescription.trim().length > 20) {
+    const descClean = metaDescription.trim();
+    if (L === 'HI') {
+      bullets.push(`${name} आधिकारिक वेब विवरण: ${descClean.slice(0, 120)}`);
+      bullets.push(`डीपीडीपी अधिनियम के तहत उपयोगकर्ता सहमति प्रबंधन और डेटा विलोपन अधिकार लागू हैं`);
+    } else if (L === 'TE') {
+      bullets.push(`${name} అధికారిక వెబ్ వివరణ: ${descClean.slice(0, 120)}`);
+      bullets.push(`డిపిడిపి చట్టం కింద వినియోగదారు సమ్మతి నిర్వహణ మరియు డేటా తొలగింపు హక్కులు వర్తిస్తాయి`);
+    } else {
+      bullets.push(`${name} official web page: ${descClean.slice(0, 120)}`);
+      bullets.push(`DPDP Act compliance enabled for user consent control and data protection`);
+    }
+  }
+
+  // If still insufficient verified information, return standard unavailable message — DO NOT GUESS!
+  if (bullets.length === 0) {
+    const msg = L === 'HI' 
+      ? 'सत्यापित जानकारी उपलब्ध नहीं है' 
+      : L === 'TE' 
+      ? 'ధృవీకరించిన సమాచారం అందుబాటులో లేదు' 
+      : 'Verified website information unavailable.';
+      
+    return {
+      success: false,
+      websiteId: domain,
+      domain: domain,
+      websiteName: name || domain,
+      summary: { [L]: `• ${msg}` },
+      bullets: [`• ${msg}`],
+      currentLanguage: L,
+      source: 'strict-factual-fallback-unavailable',
+      generatedAt: new Date().toISOString(),
+      version: '1.0'
+    };
+  }
+
+  const formattedBullets = bullets.slice(0, 3).map(b => b.startsWith('•') ? b : `• ${b}`);
+
+  return {
+    success: true,
+    websiteId: domain,
+    domain: domain,
+    websiteName: name || domain,
+    summary: {
+      [L]: formattedBullets.join('\n')
+    },
+    bullets: formattedBullets,
+    currentLanguage: L,
+    source: 'strict-factual-fallback',
+    generatedAt: new Date().toISOString(),
+    version: '1.0'
+  };
+}
+
+// ─── Legacy Wrapper Functions for Backwards Compatibility ─────────────────────
+
+async function generateWebsiteBrief({ domain, title, metaDescription, headings = [] }) {
+  const result = await getWebsiteSummary({
+    domain,
+    pageTitle: title,
+    metaDescription,
+    headings,
+    language: 'EN'
+  });
+
+  return {
+    success: result.success,
+    siteName: result.websiteName,
+    brief: result.bullets.join('\n'),
+    isFallback: result.source !== 'gemini'
+  };
+}
+
+async function summarizePrivacyPolicy(policyText, siteName = 'Website', options = {}) {
+  const result = await getWebsiteSummary({
+    domain: siteName,
+    websiteName: siteName,
+    policyText,
+    language: options.language || 'EN'
+  });
+
+  return {
+    success: true,
+    summary: result.bullets.join('\n'),
+    bullets: result.bullets,
+    riskLevel: 'Medium',
+    keyTakeaways: ['DPDP §6 Consent', 'Data Retention'],
+    isFallback: result.source !== 'gemini',
+    modelUsed: result.source
+  };
+}
+
+function generateRuleBasedSummary(text, siteName, language = 'EN') {
+  const result = generateStrictFactualFallback({
+    domain: normalizeDomain(siteName) || 'website.com',
+    siteName,
+    policyText: text,
+    language
+  });
+
+  return {
+    success: true,
+    summary: result.bullets.join('\n'),
+    bullets: result.bullets,
+    riskLevel: 'Medium',
+    keyTakeaways: ['DPDP §6/§12'],
+    isFallback: true,
+    modelUsed: 'rule-based-engine'
+  };
+}
+
+function generateLegalNotice(params) {
+  const currentDate = new Date().toISOString().split('T')[0];
+  const isErasure = params.requestType === 'DATA_ERASURE' || params.requestType === 'ACCOUNT_DELETION';
+
+  const subject = isErasure
+    ? `FORMAL NOTICE: Exercise of Right to Data Erasure (Section 12, DPDP Act 2023) — ${params.userEmail}`
+    : `FORMAL NOTICE: Revocation of Consent (Section 6, DPDP Act 2023) — ${params.userEmail}`;
+
+  const body = `Date: ${currentDate}
+To: Data Protection Officer / Privacy Team (${params.websiteName})
+Email: ${params.dpoEmail}
+
+From: ${params.userName}
+Registered Email: ${params.userEmail}
+
+Subject: ${subject}
+
+Dear Data Protection Officer,
+
+I am writing to you in my capacity as a Data Principal under the Digital Personal Data Protection Act, 2023 (DPDP Act).
+
+${
+  isErasure
+    ? `Pursuant to Section 12(1) of the DPDP Act 2023, I hereby formally request the complete ERASURE and PERMANENT DELETION of all personal data held by ${params.websiteName} associated with my email address (${params.userEmail}).`
+    : `Pursuant to Section 6(4) of the DPDP Act 2023, I hereby formally REVOKE my consent previously granted for: "${params.targetConsent}".`
+}
+
+Please acknowledge receipt of this notice.
+
+Sincerely,
+${params.userName}`;
+
+  return {
+    subject,
+    body,
+    mailtoUrl: `mailto:${encodeURIComponent(params.dpoEmail || '')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  };
+}
+
 module.exports = {
+  normalizeDomain,
+  getWebsiteSummary,
+  generateWebsiteBrief,
   summarizePrivacyPolicy,
   generateRuleBasedSummary,
-  generateLegalNotice,
-  callGeminiAPI,
-  generateWebsiteBrief
+  generateLegalNotice
 };

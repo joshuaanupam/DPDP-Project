@@ -61,7 +61,8 @@ app.post('/api/demo/reset', async (req, res) => {
   }
 });
 
-// AI Policy Summarizer
+// AI Policy Summarizer & Unified Website Summary
+app.post('/api/ai/website-summary', aiController.getWebsiteSummary);
 app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
 app.post('/api/ai/website-brief', aiController.getWebsiteBrief);
 
