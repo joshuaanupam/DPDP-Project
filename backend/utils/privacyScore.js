@@ -3,7 +3,7 @@
  * @description Digital Privacy Score Engine for PrivacyLens DPDP Platform
  * Formula: Score = 100 - (ActiveMarketingConsents * 5) - (HighRiskSites * 10) + (RevokedConsents * 3)
  * Bounds: Clamped strictly to [0, 100]
- * Owned by: TM1 (Project Lead & AI Intelligence Engineer)
+ * Owned by: TM1 (Project Lead & AI Intelligence Engineer) & TM4 (Backend Engineer)
  */
 
 /**
@@ -190,9 +190,51 @@ function computeWebsiteRisk(website = {}) {
   return 'Low';
 }
 
+/**
+ * Calculates and updates user's Digital Privacy Score in database via Prisma.
+ */
+async function calculateAndSavePrivacyScore(prisma, userId) {
+  try {
+    const userConsents = await prisma.consent.findMany({
+      where: { userId },
+      include: { website: true }
+    });
+
+    const userWebsites = await prisma.website.findMany({
+      where: {
+        OR: [
+          { consents: { some: { userId } } },
+          { dataItems: { some: { userId } } }
+        ]
+      }
+    });
+
+    const userRequests = await prisma.privacyRequest.findMany({
+      where: { userId }
+    });
+
+    const result = calculateUserPrivacyScoreFromData({
+      websites: userWebsites,
+      consents: userConsents,
+      requests: userRequests
+    });
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { privacyScore: result.score }
+    });
+
+    return result.score;
+  } catch (error) {
+    console.error('Error calculating privacy score:', error);
+    return 85;
+  }
+}
+
 module.exports = {
   calculatePrivacyScore,
   calculateUserPrivacyScoreFromData,
   getScoreBand,
-  computeWebsiteRisk
+  computeWebsiteRisk,
+  calculateAndSavePrivacyScore
 };
