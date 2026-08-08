@@ -437,25 +437,6 @@ function renderRecentVisits(visits) {
 let currentActiveDomain = '';
 let currentSelectedLanguage = 'EN';
 
-/**
- * Normalizes host domain or full URL to primary domain identifier (e.g. https://www.youtube.com/watch?v=123 -> youtube.com)
- */
-function normalizeDomain(hostnameOrUrl) {
-  if (!hostnameOrUrl) return '';
-  let str = hostnameOrUrl.trim().toLowerCase();
-  if (str.includes('://')) {
-    try {
-      str = new URL(str).hostname;
-    } catch (e) {
-      str = str.split('://')[1].split('/')[0];
-    }
-  }
-  str = str.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
-  if (str.startsWith('www.')) {
-    str = str.substring(4);
-  }
-  return str;
-}
 
 /**
  * Setup language selector buttons in WEBSITE SUMMARY card

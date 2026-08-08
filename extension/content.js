@@ -368,9 +368,6 @@ function checkForLoginConfirmation() {
       const sessionConfirmedKey = 'reclaim_confirmed_login_' + pending.eventId;
       if (sessionStorage.getItem(sessionConfirmedKey)) return;
       sessionStorage.setItem(sessionConfirmedKey, '1');
-
-      // Trigger 30-second automatic overlay display on successful login!
-      triggerAutomaticOverlay();
     }
   } catch (err) {}
 }
@@ -1161,9 +1158,15 @@ try {
   /**
    * Automatically triggers/refreshes the in-page Shadow DOM overlay and starts/resets the 30-second timer.
    */
-  function triggerAutomaticOverlay() {
+  function triggerAutomaticOverlay(force = false) {
     const domain = overlayNormalizeDomain(window.location.hostname);
     if (!domain || domain === 'unknown' || isExcludedPage() || isDismissed(domain)) {
+      return;
+    }
+
+    // Do NOT re-trigger overlay or restart timer if overlay is already active for the same domain
+    const existingHost = document.getElementById(OVERLAY_HOST_ID);
+    if (!force && _lastOverlayDomain === domain && existingHost && _automaticOverlayTimer) {
       return;
     }
 
@@ -1178,14 +1181,11 @@ try {
 
     refreshOverlayUI();
 
-    if (_automaticOverlayTimer) {
-      clearTimeout(_automaticOverlayTimer);
-      _automaticOverlayTimer = null;
+    if (!_automaticOverlayTimer) {
+      _automaticOverlayTimer = setTimeout(() => {
+        hideAutomaticOverlay();
+      }, 30000);
     }
-
-    _automaticOverlayTimer = setTimeout(() => {
-      hideAutomaticOverlay();
-    }, 30000);
   }
 
   /**
