@@ -1,0 +1,26 @@
+{
+  "name": "privacylens-backend",
+  "version": "1.0.0",
+  "description": "PrivacyLens Express REST API & Prisma Backend Server",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "db:push": "npx prisma db push",
+    "db:seed": "node prisma/seed.js"
+  },
+  "keywords": ["privacy", "dpdp", "express", "prisma", "backend"],
+  "author": "PrivacyLens Team",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "prisma": "^5.10.0"
+  }
+}
