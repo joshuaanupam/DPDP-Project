@@ -568,6 +568,9 @@ try {
 
     .reclaim-overlay-wrapper {
       width: 340px;
+      max-height: calc(100vh - 32px);
+      display: flex;
+      flex-direction: column;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       background-color: #ffffff;
       color: #0f172a;
@@ -592,6 +595,7 @@ try {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex: 0 0 auto;
     }
     .brand {
       font-weight: 800;
@@ -634,7 +638,11 @@ try {
     .close-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
     /* --- Container & Cards --- */
-    .container { padding: 12px; }
+    .container {
+      padding: 12px;
+      flex: 1 1 auto;
+      overflow-y: auto;
+    }
     .card {
       background: #ffffff;
       border: 1px solid #e5e0d3;
@@ -770,6 +778,7 @@ try {
       text-align: center;
       border-top: 1px solid #e5e0d3;
       line-height: 1.4;
+      flex: 0 0 auto;
     }
 
     .alert-chip-child {
@@ -825,8 +834,8 @@ try {
           <div class="card-title">
             <span>WEBSITE SUMMARY</span>
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 10px; font-weight: 800; color: #2563eb; background: #e0f2fe; padding: 2px 6px; border-radius: 4px;">ENGLISH</span>
-              <span id="btn-refresh-brief" style="cursor: pointer; color: #2563eb; font-size: 10px; font-weight: 700; transition: color 0.2s;">[REFRESH]</span>
+              <span style="font-size: 10px; font-weight: 800; color: #8a7a5c; background: #EFE8DA; padding: 2px 6px; border-radius: 4px;">ENGLISH</span>
+              <span id="btn-refresh-brief" style="cursor: pointer; color: #8a7a5c; font-size: 10px; font-weight: 700; transition: color 0.2s;">[REFRESH]</span>
             </div>
           </div>
           <div id="brief-content" style="font-size: 12px; line-height: 1.5; color: #0f172a;">
@@ -1072,11 +1081,11 @@ try {
       item.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <strong style="color: #1e293b; font-size: 12px;">${normalizedDom}</strong> ${demoBadge}
+            <strong style="color: #0f172a; font-size: 12px;">${normalizedDom}</strong> ${demoBadge}
           </div>
-          <span style="font-size: 11px; color: #64748b; font-weight: 500;">${formattedTime}</span>
+          <span style="font-size: 11px; color: #6b6a64; font-weight: 500;">${formattedTime}</span>
         </div>
-        <div id="${summaryBoxId}" class="recent-summary-box" style="margin-top: 5px; padding: 6px 8px; background: #f8fafc; border-left: 3px solid #2563eb; border-radius: 4px; font-size: 11px; color: #334155; line-height: 1.4; white-space: pre-line;">
+        <div id="${summaryBoxId}" class="recent-summary-box" style="margin-top: 5px; padding: 6px 8px; background: #F7F5EF; border-left: 3px solid #8a7a5c; border-radius: 4px; font-size: 11px; color: #6b6a64; line-height: 1.4; white-space: pre-line;">
           🔄 Loading summary...
         </div>
       `;

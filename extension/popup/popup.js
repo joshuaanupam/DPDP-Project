@@ -443,11 +443,11 @@ async function renderRecentVisits(visits) {
     item.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <strong style="color: #1e293b; font-size: 12px;">${normalizedDom}</strong> ${demoBadge}
+          <strong style="color: #0f172a; font-size: 12px;">${normalizedDom}</strong> ${demoBadge}
         </div>
-        <span style="font-size: 11px; color: #64748b; font-weight: 500;">${formattedTime}</span>
+        <span style="font-size: 11px; color: #6b6a64; font-weight: 500;">${formattedTime}</span>
       </div>
-      <div id="${summaryBoxId}" class="recent-summary-box" style="margin-top: 5px; padding: 6px 8px; background: #f8fafc; border-left: 3px solid #2563eb; border-radius: 4px; font-size: 11px; color: #334155; line-height: 1.4; white-space: pre-line;">
+      <div id="${summaryBoxId}" class="recent-summary-box" style="margin-top: 5px; padding: 6px 8px; background: #F7F5EF; border-left: 3px solid #8a7a5c; border-radius: 4px; font-size: 11px; color: #6b6a64; line-height: 1.4; white-space: pre-line;">
         🔄 Loading summary...
       </div>
     `;
