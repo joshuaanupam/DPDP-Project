@@ -7,6 +7,9 @@ const dashboardController = require('./controllers/dashboardController');
 const requestController = require('./controllers/requestController');
 const auditController = require('./controllers/auditController');
 const websiteController = require('./controllers/websiteController');
+const aiController = require('./controllers/aiController');
+const userController = require('./controllers/userController');
+const breachController = require('./controllers/breachController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +45,17 @@ app.get('/api/audit/:userId', auditController.getAuditLogs);
 
 // Website Details
 app.get('/api/websites/:websiteId', websiteController.getWebsiteDetail);
+
+// Advanced DPDP Nominee Features
+app.post('/api/user/nominate', userController.nominateUser);
+app.post('/api/user/confirm-nomination', userController.confirmNomination);
+
+// Advanced DPDP Breach & Penalty Shield
+app.post('/api/breaches/report', breachController.reportBreach);
+app.get('/api/penalty-shield', breachController.getPenaltyShield);
+
+// AI Policy Summarizer
+app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
 
 // Reset Demo Database
 app.post('/api/demo/reset', async (req, res) => {

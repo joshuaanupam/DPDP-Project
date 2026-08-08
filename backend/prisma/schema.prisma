@@ -8,16 +8,32 @@ generator client {
 }
 
 model User {
-  id           String           @id @default(uuid())
-  name         String
-  email        String           @unique
-  passwordHash String
-  privacyScore Int              @default(85)
-  createdAt    DateTime         @default(now())
-  dataItems    DataItem[]
-  consents     Consent[]
-  requests     PrivacyRequest[]
-  auditLogs    AuditLog[]
+  id               String           @id @default(uuid())
+  name             String
+  email            String           @unique
+  passwordHash     String
+  privacyScore     Int              @default(85)
+  dob              DateTime?
+  guardianId       String?
+  guardianEmail    String?
+  nomineeName      String?
+  nomineeEmail     String?
+  nomineeConfirmed Boolean?
+  createdAt        DateTime         @default(now())
+  dataItems        DataItem[]
+  consents         Consent[]
+  requests         PrivacyRequest[]
+  auditLogs        AuditLog[]
+}
+
+model Breach {
+  id                 String   @id @default(uuid())
+  orgId              String
+  description        String
+  affectedCount      Int
+  reportedToBoard    Boolean
+  principalsNotified Boolean
+  createdAt          DateTime @default(now())
 }
 
 model Website {
