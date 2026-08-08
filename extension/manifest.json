@@ -23,6 +23,7 @@
   ],
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "RECLAIM Privacy Exposure Monitor"
+    "default_title": "RECLAIM Privacy Exposure Monitor",
+    "theme_color": "#6b5b3a"
   }
 }
