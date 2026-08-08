@@ -545,7 +545,7 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'usr_12345',
+          userId: userData.id || 'usr_12345',
           websiteId,
           requestType: 'CONSENT_REVOCATION',
           targetConsent: consentType,
@@ -556,9 +556,9 @@ export const PrivacyProvider = ({ children }) => {
 
       if (response.ok) {
         // Re-sync with backend database
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchRequests(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
       }
     } catch (err) {
       console.warn("Backend offline. Simulating request tracking locally.");
@@ -610,7 +610,7 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'usr_12345',
+          userId: userData.id || 'usr_12345',
           websiteId,
           requestType: 'ACCOUNT_DELETION',
           targetConsent: 'Account & Data Removal',
@@ -620,9 +620,9 @@ export const PrivacyProvider = ({ children }) => {
       });
 
       if (response.ok) {
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchRequests(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
       }
     } catch (err) {
       console.warn("Backend offline. Logging guided initiation locally.");
@@ -675,7 +675,7 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'usr_12345',
+          userId: userData.id || 'usr_12345',
           websiteId,
           requestType,
           tier: 3,
@@ -685,9 +685,9 @@ export const PrivacyProvider = ({ children }) => {
       });
 
       if (response.ok) {
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchRequests(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
       }
     } catch (err) {
       console.warn("Backend offline. Logging notice notice locally.");

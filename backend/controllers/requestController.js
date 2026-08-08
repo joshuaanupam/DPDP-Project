@@ -27,10 +27,34 @@ exports.createPrivacyRequest = async (req, res) => {
     }
     const userId = user.id;
 
-    // Fetch Website
-    const website = await prisma.website.findUnique({ where: { id: websiteId } });
+    // Fetch Website (or resolve by domain/prefix for extension-synchronized websites)
+    let website = await prisma.website.findUnique({ where: { id: websiteId } });
     if (!website) {
-      return res.status(404).json({ success: false, message: 'Website not found.' });
+      const domainToTry = websiteId.startsWith('ext_site_') ? websiteId.replace('ext_site_', '') : websiteId;
+      website = await prisma.website.findFirst({
+        where: {
+          domain: {
+            equals: domainToTry,
+            mode: 'insensitive'
+          }
+        }
+      });
+
+      if (!website) {
+        const cleanName = domainToTry.split('.')[0].charAt(0).toUpperCase() + domainToTry.split('.')[0].slice(1);
+        const isShopEase = domainToTry.includes('shopease') || domainToTry.includes('3000');
+        website = await prisma.website.create({
+          data: {
+            domain: domainToTry.toLowerCase(),
+            name: isShopEase ? 'ShopEase' : cleanName,
+            category: isShopEase ? 'E-Commerce' : 'Tracked Web Service',
+            riskLevel: 'Medium',
+            deletionTier: isShopEase ? 1 : 2,
+            directApiUrl: isShopEase ? 'http://localhost:3000/api/partner/revoke' : null,
+            guidedUrl: isShopEase ? 'http://localhost:3000/account' : `https://${domainToTry}/privacy`
+          }
+        });
+      }
     }
 
     // Determine Tier / Method
