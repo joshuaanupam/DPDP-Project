@@ -60,8 +60,10 @@ export const DashboardPage = () => {
             </div>
           </div>
 
-          {/* Overview Stat Cards */}
-          <OverviewStats activeTab={activeTab} setActiveTab={setActiveTab} />
+          {/* Overview Stat Cards — only visible on Footprint tab */}
+          {(activeTab === 'FOOTPRINT' || activeTab === null) && (
+            <OverviewStats activeTab={activeTab} setActiveTab={setActiveTab} />
+          )}
 
           {/* Dynamic Tab Content */}
           <div id="dynamic-tab-content" className="grid grid-cols-1 gap-6">
