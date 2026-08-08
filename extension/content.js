@@ -493,6 +493,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const href = window.location.href.toLowerCase();
     if (href === 'about:blank' || href === 'about:newtab' || href === 'chrome://newtab/') return true;
 
+    const hostname = (window.location.hostname || '').toLowerCase();
+    // Exclude local PrivacyLens project development pages (localhost, 127.0.0.1, 172.20.21.109)
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '172.20.21.109') return true;
+
     const domain = overlayNormalizeDomain(window.location.hostname);
     // Exclude google.com and all subdomains (mail.google.com, maps.google.com, etc.)
     if (domain === 'google.com' || domain.endsWith('.google.com')) return true;
@@ -1026,65 +1030,67 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // -------------------------------------------------------
 
   function refreshOverlayUI() {
-    if (!_shadowRef) return;
+    if (!chrome.runtime || !chrome.runtime.id) return;
+    try {
+      chrome.runtime.sendMessage({ type: 'GET_EXTENSION_STATE', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
+        if (!chrome.runtime || !chrome.runtime.id || chrome.runtime.lastError) return;
 
-    chrome.runtime.sendMessage({ type: 'GET_EXTENSION_STATE', domain: overlayNormalizeDomain(window.location.hostname) }, (response) => {
-      if (chrome.runtime.lastError || !_shadowRef) return;
-
-      const siteData = response || {};
-      const allExposures = siteData.exposures || {};
-      const isDemo = siteData.demoMode || false;
-
-      let visits = siteData.recentWebsiteVisits || [];
-      if (!isDemo) {
-        visits = visits.filter(v => !v.isDemo);
-      }
-
-        // Active Tab State Machine — using window.location (content script knows the page)
-        const activeTabState = {
-          status: 'success',
-          domain: overlayNormalizeDomain(window.location.hostname),
-          title: document.title || window.location.hostname,
-          url: window.location.href,
-          protocol: window.location.protocol.replace(':', '').toUpperCase()
-        };
-
-        if (isInternalUrl(window.location.href)) {
-          activeTabState.status = 'unsupported-page';
-        }
-
+        const siteData = response || {};
+        const allExposures = siteData.exposures || {};
+        const isDemo = siteData.demoMode || false;
         const isChildSafe = siteData.childSafeMode || false;
-        const currentExp = allExposures[activeTabState.domain] || null;
-        let hasBehavioralTracking = detectBehavioralTracking().hasBehavioralTracking;
-        if (currentExp && (currentExp.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
-          hasBehavioralTracking = true;
+
+        let visits = siteData.recentWebsiteVisits || [];
+        if (!isDemo) {
+          visits = visits.filter(v => !v.isDemo);
         }
 
-        // Render Current Active Site Card
-        renderCurrentSite(_shadowRef, activeTabState, currentExp);
+        // Render floating overlay UI ONLY if Shadow DOM is injected on non-excluded external pages
+        if (_shadowRef) {
+          const activeTabState = {
+            status: 'success',
+            domain: overlayNormalizeDomain(window.location.hostname),
+            title: document.title || window.location.hostname,
+            url: window.location.href,
+            protocol: window.location.protocol.replace(':', '').toUpperCase()
+          };
 
-        // Render Child Safe Alert (§9)
-        const alertContainer = _shadowRef.getElementById('child-safe-alert-container');
-        if (alertContainer) {
-          if (isChildSafe && hasBehavioralTracking) {
-            alertContainer.innerHTML = `
-              <div class="alert-chip-child" id="child-safe-warning-alert">
-                ⚠️ WARNING: Children's Behavioral Tracking Detected (§9)
-              </div>
-            `;
-          } else {
-            alertContainer.innerHTML = '';
+          if (isInternalUrl(window.location.href)) {
+            activeTabState.status = 'unsupported-page';
           }
+
+          const currentExp = allExposures[activeTabState.domain] || null;
+          let hasBehavioralTracking = detectBehavioralTracking().hasBehavioralTracking;
+          if (currentExp && (currentExp.consentTypes || []).some(c => c === 'marketing' || c === 'promotional')) {
+            hasBehavioralTracking = true;
+          }
+
+          // Render Current Active Site Card
+          renderCurrentSite(_shadowRef, activeTabState, currentExp);
+
+          // Render Child Safe Alert (§9)
+          const alertContainer = _shadowRef.getElementById('child-safe-alert-container');
+          if (alertContainer) {
+            if (isChildSafe && hasBehavioralTracking) {
+              alertContainer.innerHTML = `
+                <div class="alert-chip-child" id="child-safe-warning-alert">
+                  ⚠️ WARNING: Children's Behavioral Tracking Detected (§9)
+                </div>
+              `;
+            } else {
+              alertContainer.innerHTML = '';
+            }
+          }
+
+          // Render Overall Overview Metrics & Privacy Score
+          renderExposureOverview(_shadowRef, allExposures, siteData);
+
+          // Render Recent Website Activity List
+          renderRecentVisits(_shadowRef, visits);
         }
-
-        // Render Overall Overview Metrics & Privacy Score
-        renderExposureOverview(_shadowRef, allExposures, siteData);
-
-        // Render Recent Website Activity List
-        renderRecentVisits(_shadowRef, visits);
 
         // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
-        if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) {
+        if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('172.20.21.109')) {
           const syncPayload = {
             type: 'RECLAIM_EXTENSION_SYNC',
             eventId: 'sync_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
@@ -1104,7 +1110,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             window.dispatchEvent(new CustomEvent('reclaim_extension_sync_event', { detail: syncPayload }));
           } catch (e) {}
         }
-    });
+      });
+    } catch (e) {
+      // Ignore extension context invalidation when extension is reloaded/updated
+    }
   }
 
   // Listen for explicit Dashboard sync requests
