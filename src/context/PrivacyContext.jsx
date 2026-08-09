@@ -783,6 +783,21 @@ export const PrivacyProvider = ({ children }) => {
         // Clear local storage sync cache
         localStorage.removeItem('reclaim_extension_sync');
 
+        // Reset frontend extension data state to 0 immediately
+        setExtensionData({
+          webCount: 0,
+          exposureCount: 0,
+          visitedWebsites: [],
+          exposures: {},
+          privacyScore: 100,
+          isExtensionSynced: false
+        });
+
+        // Clear websites list immediately to let fetchDashboardData load the clean database ones
+        setWebsites([]);
+        setRequests([]);
+        setAuditLogs([]);
+
         // Clear extension local data
         window.postMessage({
           direction: 'from-page',
