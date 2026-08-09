@@ -780,6 +780,15 @@ export const PrivacyProvider = ({ children }) => {
           detail: { token: 'token_usr_12345', user: defaultUser }
         }, '*');
 
+        // Clear local storage sync cache
+        localStorage.removeItem('reclaim_extension_sync');
+
+        // Clear extension local data
+        window.postMessage({
+          direction: 'from-page',
+          type: 'ClearExtensionData'
+        }, '*');
+
         await fetchDashboardData('usr_12345');
         await fetchRequests('usr_12345');
         await fetchAuditLogs('usr_12345');
