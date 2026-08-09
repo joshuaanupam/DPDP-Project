@@ -760,9 +760,29 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST'
       });
       if (response.ok) {
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        // Force session and user state to default demo user Joshua (usr_12345)
+        localStorage.setItem('privacylens_token', 'token_usr_12345');
+        
+        // Notify extension of session reset
+        const defaultUser = {
+          id: 'usr_12345',
+          name: 'Joshua',
+          email: 'joshua@example.com',
+          privacyScore: 72
+        };
+        setUserData(defaultUser);
+        setIsAuthenticated(true);
+        setBackendActive(true);
+
+        window.postMessage({
+          direction: 'from-page',
+          type: 'SetExtensionSession',
+          detail: { token: 'token_usr_12345', user: defaultUser }
+        }, '*');
+
+        await fetchDashboardData('usr_12345');
+        await fetchRequests('usr_12345');
+        await fetchAuditLogs('usr_12345');
         return true;
       }
     } catch (err) {
