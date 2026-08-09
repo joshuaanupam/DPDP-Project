@@ -2005,4 +2005,159 @@ window.addEventListener('message', async (event) => {
       }, 30000);
     }
   }
+
+  /**
+   * Automatically hides the in-page overlay after 30 seconds.
+   * Modifies ONLY UI visibility. Does NOT delete data, reset webCount/exposureCount, or alter persistent state.
+   */
+  function hideAutomaticOverlay() {
+    if (_automaticOverlayTimer) {
+      clearTimeout(_automaticOverlayTimer);
+      _automaticOverlayTimer = null;
+    }
+
+    const host = document.getElementById(OVERLAY_HOST_ID);
+    if (host) {
+      host.style.display = 'none';
+    }
+  }
+
+  function injectOverlay() {
+    const domain = overlayNormalizeDomain(window.location.hostname);
+    if (!domain || domain === 'unknown') return;
+    if (isExcludedPage()) return;
+    if (isDismissed(domain)) return;
+
+    // Prevent duplicates
+    if (document.getElementById(OVERLAY_HOST_ID)) return;
+
+    // Create host element with fixed positioning
+    const host = document.createElement('div');
+    host.id = OVERLAY_HOST_ID;
+    host.style.cssText = 'all: initial; position: fixed; z-index: 2147483647; bottom: 16px; right: 16px;';
+
+    // Attach closed Shadow DOM for full CSS isolation
+    const shadow = host.attachShadow({ mode: 'closed' });
+    _shadowRef = shadow;
+
+    // Inject styles
+    const style = document.createElement('style');
+    style.textContent = POPUP_CSS;
+    shadow.appendChild(style);
+
+    // Inject HTML
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = POPUP_HTML;
+    shadow.appendChild(wrapper);
+
+    // Attach to page
+    document.body.appendChild(host);
+
+    // --- Wire up event listeners ---
+
+    // Close button
+    const closeBtn = shadow.getElementById('reclaim-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        setDismissed(domain);
+        hideAutomaticOverlay();
+      });
+    }
+
+    // Dashboard button — opens dashboard in new tab
+    const dashboardBtn = shadow.getElementById('btn-open-dashboard');
+    if (dashboardBtn) {
+      dashboardBtn.addEventListener('click', () => {
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+          chrome.runtime.sendMessage({ type: 'OPEN_DASHBOARD' }).catch(() => {});
+        }
+        window.open('http://localhost:5173', '_blank');
+      });
+    }
+
+    // Initial data load
+    refreshOverlayUI();
+  }
+
+  function removeOverlay() {
+    hideAutomaticOverlay();
+    const existing = document.getElementById(OVERLAY_HOST_ID);
+    if (existing) existing.remove();
+    _shadowRef = null;
+  }
+
+  // -------------------------------------------------------
+  // SPA Navigation Detection
+  // -------------------------------------------------------
+
+  function handleUrlChange() {
+    const currentDomain = overlayNormalizeDomain(window.location.hostname);
+    const currentUrl = window.location.href;
+
+    if (currentUrl === _lastOverlayUrl) return;
+    _lastOverlayUrl = currentUrl;
+
+    // Do NOT re-trigger automatic overlay on same-domain URL/path changes
+    if (currentDomain === _lastOverlayDomain) {
+      return;
+    }
+
+    _lastOverlayDomain = currentDomain;
+
+    // Remove existing overlay for previous domain
+    removeOverlay();
+
+    // Re-inject & start 30s timer for new domain after a brief settling delay
+    setTimeout(() => triggerAutomaticOverlay(), 300);
+  }
+
+  // popstate (back/forward)
+  window.addEventListener('popstate', handleUrlChange);
+
+  // hashchange
+  window.addEventListener('hashchange', handleUrlChange);
+
+  // Intercept pushState / replaceState for SPA frameworks
+  const _origPushState = history.pushState;
+  const _origReplaceState = history.replaceState;
+
+  history.pushState = function () {
+    _origPushState.apply(this, arguments);
+    handleUrlChange();
+  };
+
+  history.replaceState = function () {
+    _origReplaceState.apply(this, arguments);
+    handleUrlChange();
+  };
+
+  // Fallback URL poller (some SPAs manipulate URL without standard APIs)
+  setInterval(() => {
+    if (window.location.href !== _lastOverlayUrl) {
+      handleUrlChange();
+    }
+  }, 1500);
+
+  // -------------------------------------------------------
+  // Listen for live data updates from background
+  // -------------------------------------------------------
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message && message.type === 'OVERLAY_DATA_UPDATE') {
+        refreshOverlayUI();
+      }
+    });
+  }
+
+  // -------------------------------------------------------
+  // Initial display — triggers 30s automatic overlay
+  // -------------------------------------------------------
+  if (document.readyState === 'complete') {
+    setTimeout(() => triggerAutomaticOverlay(), 400);
+  } else {
+    window.addEventListener('load', () => {
+      setTimeout(() => triggerAutomaticOverlay(), 400);
+    });
+  }
+
 })();
