@@ -132,6 +132,102 @@ function detectConsentCategories(inputs) {
 }
 
 /**
+ * Deterministic Explainable Risk Classification Engine
+ */
+function evaluateWebsiteRisk() {
+  const protocol = window.location.protocol;
+  const isHttps = protocol.startsWith('https');
+  const tracking = detectBehavioralTracking();
+
+  const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
+  const categories = detectDataCategories(inputs);
+  const consents = detectConsentCategories(inputs);
+
+  let score = 0;
+  const reasons = [];
+
+  // Protocol Check
+  if (!isHttps) {
+    score += 35;
+    reasons.push('Insecure HTTP protocol');
+  }
+
+  // Input fields check
+  const hasPassword = inputs.some(input => input.type === 'password');
+  if (hasPassword) {
+    score += 15;
+    reasons.push('Sensitive account credential collection');
+  }
+
+  const hasPhone = categories.includes('phone') || inputs.some(i => i.type === 'tel' || (i.name || '').toLowerCase().includes('phone') || (i.placeholder || '').toLowerCase().includes('phone'));
+  if (hasPhone) {
+    score += 8;
+    reasons.push('Telephone number collection');
+  }
+
+  const hasDob = inputs.some(i => {
+    const name = (i.name || '').toLowerCase();
+    const placeholder = (i.placeholder || '').toLowerCase();
+    const id = (i.id || '').toLowerCase();
+    const type = (i.type || '').toLowerCase();
+    return type === 'date' || name.includes('dob') || name.includes('birth') || name.includes('age') || placeholder.includes('dob') || placeholder.includes('birth') || placeholder.includes('age') || id.includes('dob') || id.includes('birth') || id.includes('age');
+  });
+  if (hasDob) {
+    score += 12;
+    reasons.push('Age/Date of Birth collection');
+  }
+
+  const hasEmail = categories.includes('email');
+  if (hasEmail) {
+    score += 4;
+    reasons.push('Email address collection');
+  }
+
+  const hasName = categories.includes('name');
+  if (hasName) {
+    score += 4;
+    reasons.push('Personal name collection');
+  }
+
+  // Consents & Tracking
+  const hasMarketing = consents.includes('marketing') || consents.includes('promotional');
+  if (hasMarketing) {
+    score += 10;
+    reasons.push('Behavioral marketing consent request');
+  }
+
+  if (tracking.hasBehavioralTracking) {
+    score += 15;
+    reasons.push('Third-party behavioral tracking scripts');
+  }
+
+  // Privacy Policy Link Check
+  const hasPrivacyLink = Array.from(document.querySelectorAll('a')).some(a => {
+    const text = (a.innerText || '').toLowerCase();
+    const href = (a.href || '').toLowerCase();
+    return text.includes('privacy') || text.includes('policy') || text.includes('terms') || text.includes('legal') || href.includes('privacy') || href.includes('policy') || href.includes('terms') || href.includes('legal');
+  });
+  if (!hasPrivacyLink) {
+    score += 15;
+    reasons.push('No privacy policy link detected');
+  }
+
+  // Classify Risk Band
+  let level = 'Low';
+  if (score >= 60) {
+    level = 'High';
+  } else if (score >= 30) {
+    level = 'Medium';
+  }
+
+  return {
+    riskScore: Math.min(100, Math.max(0, score)),
+    riskLevel: level,
+    riskReasons: reasons
+  };
+}
+
+/**
  * Scans page DOM for behavioral tracking & targeted advertising indicators (§9)
  */
 function detectBehavioralTracking() {
@@ -416,6 +512,7 @@ function handleFormSubmit(form) {
         const tracking = detectBehavioralTracking();
 
         // Privacy-preserving metadata payload - NO PII, values, or credentials included!
+        const risk = evaluateWebsiteRisk();
         const payload = {
           type: 'FORM_SUBMISSION',
           domain: domain,
@@ -425,7 +522,10 @@ function handleFormSubmit(form) {
           timestamp: new Date().toISOString(),
           eventId: 'evt_' + Math.random().toString(36).substring(2, 11),
           childSafeMode: isChildSafe,
-          behavioralTracking: tracking
+          behavioralTracking: tracking,
+          riskScore: risk.riskScore,
+          riskLevel: risk.riskLevel,
+          riskReasons: risk.riskReasons
         };
 
         try {
@@ -468,13 +568,17 @@ if (window.location.protocol.startsWith('http')) {
         if (!isExtensionContextValid()) return;
         const isChildSafe = (res && res.childSafeMode) || false;
         try {
+          const risk = evaluateWebsiteRisk();
           chrome.runtime.sendMessage({
             type: 'PAGE_VISIT',
             domain: currentDomain,
             url: window.location.href,
             timestamp: new Date().toISOString(),
             childSafeMode: isChildSafe,
-            behavioralTracking: detectBehavioralTracking()
+            behavioralTracking: detectBehavioralTracking(),
+            riskScore: risk.riskScore,
+            riskLevel: risk.riskLevel,
+            riskReasons: risk.riskReasons
           }).catch(() => {});
         } catch (e) {}
       });
@@ -902,7 +1006,7 @@ try {
   // (adapted to query elements from shadow root instead of document)
   // -------------------------------------------------------
 
-  function renderCurrentSite(shadow, activeTabState, siteExposure) {
+  function renderCurrentSite(shadow, activeTabState, siteExposure, siteRisk) {
     const domainEl = shadow.getElementById('current-domain');
     const statusEl = shadow.getElementById('exposure-status');
     const riskPill = shadow.getElementById('site-risk-pill');
@@ -941,36 +1045,31 @@ try {
     const protocolBadge = activeTabState.protocol === 'HTTPS' ? '🔒 HTTPS' : '⚠️ HTTP';
     domainEl.innerHTML = `${domain} <span style="font-size: 11px; font-weight: normal; color: #64748b; margin-left: 6px;">(${protocolBadge})</span>`;
 
+    // Dynamic risk engine analysis
+    const dynamicRisk = evaluateWebsiteRisk();
+    const riskScore = siteRisk ? siteRisk.riskScore : dynamicRisk.riskScore;
+    const riskLevel = siteRisk ? siteRisk.riskLevel : dynamicRisk.riskLevel;
+    const riskReasons = siteRisk ? siteRisk.riskReasons : dynamicRisk.riskReasons;
+
+    const risk = riskLevel.toLowerCase();
+    riskPill.className = `risk-pill risk-${risk}`;
+    riskPill.textContent = `${risk.toUpperCase()} (${riskScore})`;
+
     if (!siteExposure) {
       statusEl.innerHTML = '⚡ <span style="color: #64748b;">No exposure recorded on this domain yet.</span>';
-      riskPill.className = 'risk-pill risk-low';
-      riskPill.textContent = 'CLEAN';
-      badgesContainer.innerHTML = '<span class="chip">No Data Captured</span>';
-      return;
+    } else {
+      statusEl.innerHTML = '⚠️ <span style="color: #0369a1;">Digital Exposure Detected</span>';
     }
 
-    // Exposure recorded for current domain
-    statusEl.innerHTML = '⚠️ <span style="color: #0369a1;">Digital Exposure Detected</span>';
-
-    const risk = (siteExposure.riskLevel || 'low').toLowerCase();
-    riskPill.className = `risk-pill risk-${risk}`;
-    riskPill.textContent = risk.toUpperCase();
-
     badgesContainer.innerHTML = '';
-
-    // Render data category chips
-    (siteExposure.dataTypes || []).forEach(type => {
+    riskReasons.forEach(reason => {
       const chip = document.createElement('span');
       chip.className = 'chip';
-      chip.textContent = type.charAt(0).toUpperCase() + type.slice(1);
-      badgesContainer.appendChild(chip);
-    });
-
-    // Render consent category chips
-    (siteExposure.consentTypes || []).forEach(consent => {
-      const chip = document.createElement('span');
-      chip.className = 'chip chip-consent';
-      chip.textContent = consent.charAt(0).toUpperCase() + consent.slice(1) + ' Consent';
+      if (reason.toLowerCase().includes('insecure') || reason.toLowerCase().includes('credential')) {
+        chip.style.backgroundColor = '#fee2e2';
+        chip.style.color = '#dc2626';
+      }
+      chip.textContent = reason;
       badgesContainer.appendChild(chip);
     });
   }
@@ -1093,7 +1192,7 @@ try {
             }
 
             // Render Current Active Site Card
-            renderCurrentSite(_shadowRef, activeTabState, currentExp);
+            renderCurrentSite(_shadowRef, activeTabState, currentExp, siteData.siteRisk);
 
             // Render Child Safe Alert (§9)
             const alertContainer = _shadowRef.getElementById('child-safe-alert-container');
@@ -1161,10 +1260,50 @@ try {
   /**
    * Automatically triggers/refreshes the in-page Shadow DOM overlay and starts/resets the 30-second timer.
    */
-  function triggerAutomaticOverlay() {
+  async function triggerAutomaticOverlay() {
     const domain = overlayNormalizeDomain(window.location.hostname);
-    if (!domain || domain === 'unknown' || isExcludedPage() || isDismissed(domain)) {
+    if (!domain || domain === 'unknown' || isExcludedPage()) {
       return;
+    }
+
+    const risk = evaluateWebsiteRisk();
+    const isHigh = risk.riskLevel === 'High';
+
+    try {
+      if (!isExtensionContextValid()) return;
+      const storage = await chrome.storage.local.get(['shownPopups', 'lastPopupTriggeredAt']);
+      const shownPopups = storage.shownPopups || {};
+      const lastTriggered = storage.lastPopupTriggeredAt || 0;
+      const now = Date.now();
+
+      // Debounce multiple tabs restoration
+      if (now - lastTriggered < 3000) {
+        return;
+      }
+
+      if (!isHigh) {
+        // LOW or MEDIUM risk: only show popup on the first visit ever
+        if (shownPopups[domain]) {
+          console.log(`[RECLAIM] Skipping repeat popup for Low/Medium risk domain: ${domain}`);
+          return;
+        }
+        shownPopups[domain] = {
+          shownCount: 1,
+          firstShownAt: new Date().toISOString(),
+          lastShownAt: new Date().toISOString()
+        };
+        await chrome.storage.local.set({
+          shownPopups,
+          lastPopupTriggeredAt: now
+        });
+      } else {
+        // HIGH risk: show popup on every meaningful visit
+        await chrome.storage.local.set({
+          lastPopupTriggeredAt: now
+        });
+      }
+    } catch (e) {
+      if (isDismissed(domain)) return;
     }
 
     _lastOverlayDomain = domain;
@@ -1208,7 +1347,10 @@ try {
     const domain = overlayNormalizeDomain(window.location.hostname);
     if (!domain || domain === 'unknown') return;
     if (isExcludedPage()) return;
-    if (isDismissed(domain)) return;
+
+    const risk = evaluateWebsiteRisk();
+    const isHigh = risk.riskLevel === 'High';
+    if (!isHigh && isDismissed(domain)) return;
 
     // Prevent duplicates
     if (document.getElementById(OVERLAY_HOST_ID)) return;

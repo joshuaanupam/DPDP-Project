@@ -75,12 +75,21 @@ exports.getDashboardData = async (req, res) => {
         activeConsentNames.push('Account Access');
       }
 
+      let parsedReasons = [];
+      try {
+        parsedReasons = JSON.parse(userSite.riskReasons || '[]');
+      } catch (e) {
+        parsedReasons = [];
+      }
+
       return {
         id: site.id,
         domain: site.domain,
         name: site.name,
         category: site.category,
-        riskLevel: site.riskLevel,
+        riskLevel: userSite.riskLevel || site.riskLevel || 'Medium',
+        riskScore: userSite.riskScore,
+        riskReasons: parsedReasons,
         deletionTier: site.deletionTier,
         directApiUrl: site.directApiUrl,
         guidedUrl: site.guidedUrl,

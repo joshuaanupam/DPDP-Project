@@ -50,11 +50,20 @@ async function sendUpdateToUser(userId) {
     const payload = JSON.stringify({
       websiteCount,
       exposureCount,
-      records: records.map(r => ({
-        domain: r.domain,
-        displayName: r.displayName,
-        loginDetected: r.loginDetected
-      }))
+      records: records.map(r => {
+        let parsedReasons = [];
+        try {
+          parsedReasons = JSON.parse(r.riskReasons || '[]');
+        } catch (e) {}
+        return {
+          domain: r.domain,
+          displayName: r.displayName,
+          loginDetected: r.loginDetected,
+          riskScore: r.riskScore,
+          riskLevel: r.riskLevel,
+          riskReasons: parsedReasons
+        };
+      })
     });
     console.log(`[Realtime Sync] Broadcasting updates to user ${userId}:`, payload);
 

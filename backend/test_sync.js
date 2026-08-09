@@ -12,13 +12,16 @@ async function testSync() {
   console.log(`Initial Exposure count: ${exposures} (Expected: 3)`);
 
   // 2. Simulate new website visit via fetch to POST /api/events
-  console.log('\nSimulating visit to a new website: netflix.com...');
+  console.log('\nSimulating visit to a new website: netflix.com (LOW risk)...');
   const visitPayload = {
     userId,
     domain: 'netflix.com',
     siteName: 'Netflix',
     eventType: 'WEBSITE_VISIT',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    riskScore: 8,
+    riskLevel: 'Low',
+    riskReasons: ['Email address collection', 'Personal name collection']
   };
 
   const visitRes = await fetch('http://localhost:5000/api/events', {
@@ -41,9 +44,12 @@ async function testSync() {
   });
   console.log(`Netflix record found in DB: ${!!netflixRecord}`);
   console.log(`Netflix loginDetected: ${netflixRecord?.loginDetected} (Expected: false)`);
+  console.log(`Netflix riskScore: ${netflixRecord?.riskScore} (Expected: 8)`);
+  console.log(`Netflix riskLevel: ${netflixRecord?.riskLevel} (Expected: Low)`);
+  console.log(`Netflix riskReasons: ${netflixRecord?.riskReasons} (Expected: ["Email address collection","Personal name collection"])`);
 
-  // 4. Simulate login event for netflix.com
-  console.log('\nSimulating login to netflix.com...');
+  // 4. Simulate login event for netflix.com (HIGH risk)
+  console.log('\nSimulating login to netflix.com (HIGH risk)...');
   const loginPayload = {
     userId,
     domain: 'netflix.com',
@@ -51,7 +57,10 @@ async function testSync() {
     eventType: 'ACCOUNT_CREATED',
     timestamp: new Date().toISOString(),
     detectedFields: ['email', 'password'],
-    consents: [{ consentType: 'Account Access', granted: true }]
+    consents: [{ consentType: 'Account Access', granted: true }],
+    riskScore: 95,
+    riskLevel: 'High',
+    riskReasons: ['Insecure HTTP protocol', 'Sensitive account credential collection', 'Telephone number collection', 'Age/Date of Birth collection', 'Behavioral marketing consent request', 'No privacy policy link detected']
   };
 
   const loginRes = await fetch('http://localhost:5000/api/events', {
@@ -73,6 +82,9 @@ async function testSync() {
     where: { userId_domain: { userId, domain: 'netflix.com' } }
   });
   console.log(`Netflix loginDetected post-login: ${netflixRecord?.loginDetected} (Expected: true)`);
+  console.log(`Netflix riskScore post-login: ${netflixRecord?.riskScore} (Expected: 95)`);
+  console.log(`Netflix riskLevel post-login: ${netflixRecord?.riskLevel} (Expected: High)`);
+  console.log(`Netflix riskReasons post-login: ${netflixRecord?.riskReasons}`);
 
   // 6. Simulate duplicate login event for netflix.com to test deduplication
   console.log('\nSimulating duplicate login to netflix.com...');

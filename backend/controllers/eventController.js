@@ -142,7 +142,10 @@ exports.handleEvent = async (req, res) => {
         where: { id: existingRecord.id },
         data: {
           lastSeenAt: new Date(),
-          loginDetected: existingRecord.loginDetected || isLoginEvent
+          loginDetected: existingRecord.loginDetected || isLoginEvent,
+          riskScore: req.body.riskScore !== undefined ? Number(req.body.riskScore) : existingRecord.riskScore,
+          riskLevel: req.body.riskLevel || existingRecord.riskLevel,
+          riskReasons: req.body.riskReasons ? JSON.stringify(req.body.riskReasons) : existingRecord.riskReasons
         }
       });
     } else {
@@ -153,7 +156,10 @@ exports.handleEvent = async (req, res) => {
           displayName: cleanSiteName,
           firstSeenAt: new Date(),
           lastSeenAt: new Date(),
-          loginDetected: isLoginEvent
+          loginDetected: isLoginEvent,
+          riskScore: req.body.riskScore !== undefined ? Number(req.body.riskScore) : 8,
+          riskLevel: req.body.riskLevel || 'Low',
+          riskReasons: req.body.riskReasons ? JSON.stringify(req.body.riskReasons) : '[]'
         }
       });
     }

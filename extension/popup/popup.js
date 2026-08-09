@@ -254,7 +254,7 @@ async function refreshUI() {
   renderRecentVisits(visits);
 
   // Render Current Active Site Card
-  renderCurrentSite(activeTabState, currentExposure);
+  renderCurrentSite(activeTabState, currentExposure, extState.siteRisk);
 
   // Render Child Safe Alert (§9) if Child Safe Mode is enabled AND behavioral tracking is detected
   renderChildSafeAlert(isChildSafe, hasBehavioralTracking);
@@ -286,7 +286,7 @@ function renderChildSafeAlert(isChildSafe, hasBehavioralTracking) {
 /**
  * Renders the active site card with full state management
  */
-function renderCurrentSite(activeTabState, siteExposure) {
+function renderCurrentSite(activeTabState, siteExposure, siteRisk) {
   const domainEl = document.getElementById('current-domain');
   const statusEl = document.getElementById('exposure-status');
   const riskPill = document.getElementById('site-risk-pill');
@@ -324,36 +324,30 @@ function renderCurrentSite(activeTabState, siteExposure) {
   const protocolBadge = activeTabState.protocol === 'HTTPS' ? '🔒 HTTPS' : '⚠️ HTTP';
   domainEl.innerHTML = `${domain} <span style="font-size: 11px; font-weight: normal; color: #64748b; margin-left: 6px;">(${protocolBadge})</span>`;
 
+  // Calculate dynamic fallback risk if background hasn't processed it yet
+  const riskScore = siteRisk ? siteRisk.riskScore : (activeTabState.protocol === 'HTTPS' ? 8 : 43);
+  const riskLevel = siteRisk ? siteRisk.riskLevel : (riskScore >= 60 ? 'High' : (riskScore >= 30 ? 'Medium' : 'Low'));
+  const riskReasons = siteRisk ? siteRisk.riskReasons : (activeTabState.protocol === 'HTTPS' ? ['Email address collection', 'Personal name collection'] : ['Insecure HTTP protocol', 'Email address collection', 'Personal name collection']);
+
+  const risk = riskLevel.toLowerCase();
+  riskPill.className = `risk-pill risk-${risk}`;
+  riskPill.textContent = `${risk.toUpperCase()} (${riskScore})`;
+
   if (!siteExposure) {
     statusEl.innerHTML = '⚡ <span style="color: #64748b;">No exposure recorded on this domain yet.</span>';
-    riskPill.className = 'risk-pill risk-low';
-    riskPill.textContent = 'CLEAN';
-    badgesContainer.innerHTML = '<span class="chip">No Data Captured</span>';
-    return;
+  } else {
+    statusEl.innerHTML = '⚠️ <span style="color: #0369a1;">Digital Exposure Detected</span>';
   }
 
-  // Exposure recorded for current domain
-  statusEl.innerHTML = '⚠️ <span style="color: #0369a1;">Digital Exposure Detected</span>';
-
-  const risk = (siteExposure.riskLevel || 'low').toLowerCase();
-  riskPill.className = `risk-pill risk-${risk}`;
-  riskPill.textContent = risk.toUpperCase();
-
   badgesContainer.innerHTML = '';
-
-  // Render data category chips
-  (siteExposure.dataTypes || []).forEach(type => {
+  riskReasons.forEach(reason => {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.textContent = type.charAt(0).toUpperCase() + type.slice(1);
-    badgesContainer.appendChild(chip);
-  });
-
-  // Render consent category chips
-  (siteExposure.consentTypes || []).forEach(consent => {
-    const chip = document.createElement('span');
-    chip.className = 'chip chip-consent';
-    chip.textContent = consent.charAt(0).toUpperCase() + consent.slice(1) + ' Consent';
+    if (reason.toLowerCase().includes('insecure') || reason.toLowerCase().includes('credential')) {
+      chip.style.backgroundColor = '#fee2e2';
+      chip.style.color = '#dc2626';
+    }
+    chip.textContent = reason;
     badgesContainer.appendChild(chip);
   });
 }

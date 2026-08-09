@@ -22,6 +22,7 @@ function normalizeDomain(hostname) {
 let visitedWebsitesSet = new Set();
 let isSetInitialized = false;
 let setInitializationPromise = null;
+let domainRiskMap = {};
 
 // Sequential Promise Chain Queue to prevent race conditions during concurrent tab processing
 let processQueueChain = Promise.resolve();
@@ -580,6 +581,7 @@ async function handleGetExtensionState(domain = '') {
   }
 
   const normalizedDomain = domain ? normalizeDomain(domain) : '';
+  const cachedRisk = normalizedDomain ? domainRiskMap[normalizedDomain] : null;
 
   return {
     webCount: webCount,
@@ -588,6 +590,7 @@ async function handleGetExtensionState(domain = '') {
     recentWebsiteVisits: recentVisits,
     exposures: activeExposures,
     siteExposure: normalizedDomain ? (activeExposures[normalizedDomain] || null) : null,
+    siteRisk: cachedRisk,
     privacyScore: calculatePrivacyScore(activeExposures),
     demoMode: isDemo,
     enabled: enabled,
@@ -657,6 +660,14 @@ async function processWebsiteVisit(data) {
 
   if (!domain || isExcludedDomain(domain)) return;
 
+  if (data.riskScore !== undefined) {
+    domainRiskMap[domain] = {
+      riskScore: data.riskScore,
+      riskLevel: data.riskLevel,
+      riskReasons: data.riskReasons
+    };
+  }
+
   // Enqueue processing to prevent race conditions when multiple tabs open concurrently
   return enqueueVisitProcessing(async () => {
     await initVisitedWebsitesSet();
@@ -712,9 +723,13 @@ async function processWebsiteVisit(data) {
     broadcastToContentScripts();
 
     // Step 5: Asynchronously sync to Google Docs / external backend (non-blocking)
-    if (isNewUniqueVisit) {
-      syncVisitToGoogleDocs({ domain, timestamp: now }).catch(() => {});
-    }
+    syncVisitToGoogleDocs({
+      domain,
+      timestamp: now,
+      riskScore: data.riskScore,
+      riskLevel: data.riskLevel,
+      riskReasons: data.riskReasons
+    }).catch(() => {});
   });
 }
 
@@ -730,7 +745,10 @@ async function syncVisitToGoogleDocs(visitData) {
     domain: visitData.domain,
     eventType: 'WEBSITE_VISIT',
     timestamp: visitData.timestamp,
-    source: 'PRIVACY_LENS_AUTO_SYNC'
+    source: 'PRIVACY_LENS_AUTO_SYNC',
+    riskScore: typeof visitData.riskScore === 'number' ? visitData.riskScore : 8,
+    riskLevel: visitData.riskLevel || 'Low',
+    riskReasons: Array.isArray(visitData.riskReasons) ? visitData.riskReasons : []
   };
 
   try {
@@ -929,7 +947,10 @@ async function sendToBackend(event) {
     consents: event.consents || [],
     eventType: event.eventType || 'FORM_SUBMISSION',
     timestamp: event.timestamp,
-    eventId: event.eventId
+    eventId: event.eventId,
+    riskScore: typeof event.riskScore === 'number' ? event.riskScore : 10,
+    riskLevel: event.riskLevel || 'Low',
+    riskReasons: Array.isArray(event.riskReasons) ? event.riskReasons : []
   };
 
   try {
@@ -1010,6 +1031,8 @@ async function startSseSync(userId) {
             (data.records || []).forEach(backendRec => {
               const dom = backendRec.domain;
               if (backendRec.loginDetected) {
+                const backRisk = (backendRec.riskLevel || 'medium').toLowerCase();
+                const backReasons = backendRec.riskReasons || ['Detected Account relationship'];
                 if (!exposures[dom]) {
                   exposures[dom] = {
                     id: 'exp_' + Math.random().toString(36).substring(2, 11),
@@ -1020,14 +1043,21 @@ async function startSseSync(userId) {
                     consentTypes: ['essential'],
                     eventCount: 1,
                     accountExposure: 'possible',
-                    riskLevel: 'medium',
-                    riskReasons: ['Detected Account relationship'],
+                    riskLevel: backRisk,
+                    riskReasons: backReasons,
                     cleanupStatus: 'RECOMMENDED'
                   };
                   exposuresChanged = true;
-                } else if (exposures[dom].accountExposure !== 'confirmed' && exposures[dom].accountExposure !== 'possible') {
-                  exposures[dom].accountExposure = 'possible';
-                  exposuresChanged = true;
+                } else {
+                  if (exposures[dom].accountExposure !== 'confirmed' && exposures[dom].accountExposure !== 'possible') {
+                    exposures[dom].accountExposure = 'possible';
+                    exposuresChanged = true;
+                  }
+                  if (exposures[dom].riskLevel !== backRisk || JSON.stringify(exposures[dom].riskReasons) !== JSON.stringify(backReasons)) {
+                    exposures[dom].riskLevel = backRisk;
+                    exposures[dom].riskReasons = backReasons;
+                    exposuresChanged = true;
+                  }
                 }
               } else {
                 // Remove login exposure locally if database indicates no loginDetected
