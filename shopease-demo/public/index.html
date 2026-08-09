@@ -55,10 +55,10 @@
       </div>
 
       <!-- Account & Lists -->
-      <a href="#signup-section" class="nav-account">
+      <div class="nav-account" onclick="openAuthModal()" style="cursor: pointer;">
         <span class="line-1">Hello, Joshua</span>
         <span class="line-2">Account & Lists <span class="dropdown-arrow">▼</span></span>
-      </a>
+      </div>
 
       <!-- Returns & Orders -->
       <div class="nav-orders">
@@ -112,7 +112,7 @@
         <p>Get up to 45% off premium audio devices, fashion backpacks, and lifestyle accessories. Fast FREE delivery on eligible orders.</p>
         <div class="hero-action-buttons">
           <a href="#products" class="btn-amazon-primary">Shop all deals</a>
-          <a href="#signup-section" class="btn-amazon-secondary">Join rewards today</a>
+          <a href="javascript:void(0)" onclick="openAuthModal()" class="btn-amazon-secondary">Join rewards today</a>
         </div>
       </div>
     </section>
@@ -220,9 +220,10 @@
       </div>
     </section>
 
-    <!-- AMAZON REGISTRATION BOX STYLING -->
-    <section id="signup-section" class="auth-section">
-      <div class="auth-card">
+    <!-- ACCOUNT REGISTRATION & PRIVACY CONSENT MODAL -->
+    <div id="auth-modal" class="modal-overlay hidden">
+      <div class="auth-card" style="position: relative; max-width: 400px; width: 90%;">
+        <button class="btn-modal-close" onclick="closeAuthModal()" style="position: absolute; top: 12px; right: 16px; font-size: 20px; font-weight: 700; color: #555; background: none; border: none; cursor: pointer; z-index: 10;">✕</button>
         
         <form id="shopease-signup-form" class="auth-form">
           <h2 class="auth-title">Create account</h2>
@@ -316,7 +317,7 @@
         </div>
 
       </div>
-    </section>
+    </div>
 
   </main>
 
