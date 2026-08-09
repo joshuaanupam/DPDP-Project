@@ -1,1209 +1,817 @@
-IMPLEMENTATION TASK — PRIVACY RISK FLAGGING + SMART EXTENSION POPUP
+CRITICAL RISK ENGINE CORRECTION — CURRENT SYSTEM IS TOO NAIVE
 
-We need to add a deterministic, hardcoded website risk-classification system to the existing PrivacyLens / RECLAIM project.
+The current implementation of the PrivacyLens / RECLAIM risk engine is NOT working correctly for real-world websites.
+
+I tested it on piracy/unofficial streaming websites such as:
+
+net77.cc
+and other similar unofficial streaming websites.
+
+The extension displayed:
+
+CLEAN / LOW RISK
+
+even though these websites are exactly the type of sites where we want the product to identify elevated privacy exposure.
+
+The reason is clear from the current architecture:
+
+The existing engine primarily scores visible DOM signals such as:
+
+- HTTP
+- Password field
+- Phone field
+- DOB
+- Email
+- Name
+- Marketing checkbox
+- Tracker scripts
+- Privacy policy
+
+Therefore, a website can have:
+
+HTTPS
+No login form
+No phone field
+No DOB field
+
+and still receive a very low score.
+
+THIS IS NOT SUFFICIENT.
+
+We need to redesign the RISK DETECTION LOGIC while preserving the existing UI, website tracking, exposure tracking, realtime synchronization, and popup behavior.
+
+============================================================
+1. CORE PROBLEM
+============================================================
+
+The current engine answers:
+
+"Does this page currently contain certain privacy-related HTML elements?"
+
+But our product needs to answer:
+
+"How much privacy exposure should a user be concerned about when interacting with this website?"
+
+These are different questions.
+
+Therefore create a MULTI-LAYER PRIVACY RISK ENGINE.
+
+============================================================
+2. NEW RISK ENGINE ARCHITECTURE
+============================================================
+
+The final score should be calculated from:
+
+A. CONNECTION SECURITY
+B. DATA COLLECTION
+C. CONSENT / PRIVACY TRANSPARENCY
+D. TRACKING / THIRD-PARTY BEHAVIOR
+E. WEBSITE BEHAVIOR
+F. WEBSITE CATEGORY / DOMAIN INTELLIGENCE
+G. SUSPICIOUS NAVIGATION / AD BEHAVIOR
+H. ACCOUNT / EXPOSURE INFORMATION
+
+Conceptually:
+
+                WEBSITE
+                   |
+        ┌──────────┼──────────┐
+        ↓          ↓          ↓
+ Connection     Page       Behavior
+  Signals      Signals      Signals
+        ↓          ↓          ↓
+        └──────────┼──────────┘
+                   ↓
+           Domain Intelligence
+                   ↓
+             Risk Engine
+                   ↓
+           SCORE 0–100
+                   ↓
+       LOW / MEDIUM / HIGH
+                   ↓
+          EXPLAINABLE REASONS
+
+============================================================
+3. IMPORTANT — DO NOT USE AI FOR THE FINAL SCORE
+============================================================
+
+The final risk classification MUST remain deterministic.
+
+AI can later explain the result in natural language.
+
+But:
+
+AI MUST NOT randomly decide:
+
+"this website looks dangerous."
+
+The actual score must come from predefined rules.
+
+This makes the system:
+
+- Explainable
+- Reproducible
+- Debuggable
+- Suitable for a hackathon
+- Easy to demonstrate to judges
+
+============================================================
+4. RISK CATEGORIES
+============================================================
+
+Use these categories:
+
+LOW:
+0–29
+
+MEDIUM:
+30–59
+
+HIGH:
+60–100
+
+But improve the scoring rules substantially.
+
+============================================================
+5. CONNECTION SECURITY RULES
+============================================================
+
+HTTP:
+
++30
+
+If the site uses:
+
+http://
+
+HTTPS:
+
+No penalty.
 
 IMPORTANT:
 
-DO NOT redesign the existing UI.
+HTTPS does NOT mean the website is automatically safe.
 
-DO NOT replace the current extension popup.
+It only means the connection is encrypted.
 
-DO NOT remove existing features.
+Do not use:
 
-DO NOT use AI/LLM to determine the risk level.
+HTTPS = CLEAN
 
-The risk classification must be based on a transparent, predefined rule engine so that we can explain to hackathon judges exactly why a website received a particular risk level.
-
-============================================================
-1. OBJECTIVE
-============================================================
-
-Every website detected by the browser extension must receive a privacy/security risk classification:
-
-LOW
-MEDIUM
-HIGH
-
-The extension should analyze observable privacy/security signals from the current website and calculate a deterministic risk score.
-
-The result should be displayed in:
-
-1. Browser extension popup
-2. Website risk notification popup
-3. Dashboard website records
-4. Website detail page where applicable
-
-The same risk result must be used everywhere.
-
-There must be ONE risk calculation engine.
-
-Do NOT create separate risk logic for extension and dashboard.
+That is a major mistake.
 
 ============================================================
-2. IMPORTANT TERMINOLOGY
+6. PASSWORD OVER HTTP
 ============================================================
 
-This is a:
+Password input + HTTP:
 
-"Privacy Exposure Risk"
++40
 
-It should NOT be presented as:
-
-"This website is malicious."
-
-It should NOT claim:
-
-"This website is unsafe."
-
-unless there is actual evidence.
-
-Instead use language such as:
-
-"High Privacy Exposure"
-
-"Medium Privacy Exposure"
-
-"Low Privacy Exposure"
-
-The risk is based on the privacy/security signals that our extension can observe.
-
-Example:
-
-HIGH PRIVACY EXPOSURE
-
-Reasons:
-- Website uses HTTP for credential submission
-- Requests phone number
-- Requests date of birth
-- Contains marketing consent
-- Contains multiple third-party trackers
-
-This is much more defensible.
+This remains a critical signal.
 
 ============================================================
-3. RISK SCORE
+7. PERSONAL DATA COLLECTION
 ============================================================
 
-Create a deterministic score from 0–100.
+Email:
++4
 
-Higher score = greater privacy exposure risk.
+Name:
++4
 
-Risk levels:
+Phone:
++8
 
-0–29:
-LOW
+Address:
++10
 
-30–59:
-MEDIUM
+DOB:
++12
 
-60–100:
-HIGH
+Location:
++10
 
-Display:
+Financial information field detected:
++20
 
-LOW
-0–29
+Government ID-related field:
++20
 
-MEDIUM
-30–59
+IMPORTANT:
 
-HIGH
-60–100
+Only detect the FIELD TYPE.
 
-Do NOT randomly change the thresholds.
+NEVER capture the actual value.
 
 ============================================================
-4. HARD-CODED RISK RULES
+8. TRACKING / THIRD-PARTY SIGNALS
 ============================================================
 
-Create ONE centralized rule configuration.
+Improve the tracker detection.
 
-Example:
+The existing:
 
-RISK_RULES = {
+"third-party scripts exist"
 
-HTTP_CONNECTION:
-+30,
+is too simplistic.
 
-PASSWORD_OVER_HTTP:
-+40,
+Create a small hardcoded tracker/category database.
 
-SENSITIVE_DATA_COLLECTION:
-+15,
+Example categories:
 
-PHONE_NUMBER_COLLECTION:
-+10,
+ANALYTICS
+ADVERTISING
+TRACKING
+SOCIAL TRACKING
+SESSION RECORDING
+FINGERPRINTING
 
-EMAIL_COLLECTION:
-+5,
+Create a hardcoded list of recognizable domains/patterns.
 
-NAME_COLLECTION:
-+3,
+Examples may include known analytics/ad/tracking infrastructure.
 
-ADDRESS_COLLECTION:
-+10,
+Do not claim that every third-party script is malicious.
 
-DATE_OF_BIRTH_COLLECTION:
-+15,
+Instead:
 
-FINANCIAL_INFORMATION_COLLECTION:
-+20,
-
-MARKETING_CONSENT:
-+8,
-
-THIRD_PARTY_DATA_SHARING_INDICATOR:
-+15,
-
-MULTIPLE_THIRD_PARTY_TRACKERS:
-+10,
-
-NO_PRIVACY_POLICY_DETECTED:
-+10,
-
-BROAD_PRIVACY_CONSENT:
-+10,
-
-EXCESSIVE_FORM_FIELDS:
-+8,
-
-CROSS_SITE_IFRAME:
+1–2 recognizable trackers:
 +5
+
+3–5:
++10
+
+6+:
++15
+
+If fingerprinting-like signals are detected:
+
++15
+
+If session-recording technology is detected:
+
++10
+
+============================================================
+9. AD / POPUP BEHAVIOR
+============================================================
+
+This is especially important for unofficial streaming/piracy websites.
+
+Detect observable behavior such as:
+
+- Excessive popup windows
+- Pop-under behavior
+- Unexpected new tabs/windows
+- Repeated redirects
+- Automatic navigation to another domain
+- Multiple advertisement overlays
+- Forced external navigation
+- Download prompts
+- Notification permission requests
+
+Scoring:
+
+Unexpected external redirect:
++10
+
+Repeated redirect behavior:
++15
+
+Pop-under/new-window behavior:
++10
+
+Multiple aggressive ad overlays:
++10
+
+Notification permission request:
++8
+
+Automatic download initiation:
++15
+
+These are PRIVACY EXPOSURE / BROWSER BEHAVIOR signals.
+
+Do NOT call the website malware simply because these signals exist.
+
+============================================================
+10. WEBSITE CATEGORY INTELLIGENCE
+============================================================
+
+THIS IS THE MAJOR MISSING PIECE.
+
+Create a hardcoded website-category intelligence layer.
+
+For the hackathon MVP, maintain a configurable category database.
+
+Example:
+
+DOMAIN_INTELLIGENCE = {
+
+    "known_unofficial_streaming": {
+        riskPoints: 25,
+        level: "elevated",
+        reason:
+        "This domain belongs to an unofficial streaming/content distribution category that commonly presents increased advertising and tracking exposure."
+    },
+
+    "known_download_portal": {
+        riskPoints: 20,
+        reason:
+        "This website belongs to a download-oriented category with potentially elevated browser and tracking exposure."
+    },
+
+    "known_ad_heavy_domain": {
+        riskPoints: 15,
+        reason:
+        "This domain is classified as an advertising-heavy web property."
+    }
 
 }
 
 IMPORTANT:
 
-These values are heuristic indicators for our hackathon MVP.
+Do NOT make the category database enormous.
 
-Document that they are NOT a formal cybersecurity certification or legal assessment.
+For the hackathon, create a small curated dataset.
+
+It should be easy to expand later.
 
 ============================================================
-5. RULE DETAILS
+11. DEMO / KNOWN DOMAIN INTELLIGENCE
 ============================================================
 
-RULE 1 — HTTP
+Create a configuration file such as:
 
-If the current page is using:
+risk/domainIntelligence.js
 
-http://
+or whatever fits the existing architecture.
 
-instead of:
+Example structure:
 
-https://
+{
+    domain: "example.com",
 
-add:
+    category: "unofficial_streaming",
 
-+30 risk points.
+    categoryScore: 25,
 
-Reason:
+    reason:
+    "Unofficial streaming category with elevated advertising and tracking exposure."
+}
 
-Data transmitted over an unencrypted HTTP connection may be exposed.
+For the hackathon demo, add our known test/demo domains.
 
-------------------------------------------------------------
+For example:
 
-RULE 2 — PASSWORD OVER HTTP
+net77.cc
 
-If a password input exists AND the page is using HTTP:
+If we intentionally classify it for the demo as:
 
-+40
+category:
+unofficial_streaming
 
-This is a critical privacy/security warning.
+then:
 
-Reason:
+category score:
++25
 
-Credential submission over an unencrypted connection is a serious risk signal.
-
-This should be one of the strongest rules.
-
-------------------------------------------------------------
-
-RULE 3 — EMAIL COLLECTION
-
-If the website collects an email address:
-
-+5
-
-Reason:
-
-Email is personal information.
-
-Do NOT consider email collection alone to be high risk.
-
-------------------------------------------------------------
-
-RULE 4 — PHONE COLLECTION
-
-If the website requests a phone number:
-
-+10
-
-Reason:
-
-Phone number is additional personal information.
-
-------------------------------------------------------------
-
-RULE 5 — NAME COLLECTION
-
-If the website requests a name:
-
-+3
-
-------------------------------------------------------------
-
-RULE 6 — ADDRESS COLLECTION
-
-If the website requests:
-
-- Address
-- Home address
-- Shipping address
-
-add:
-
-+10
-
-------------------------------------------------------------
-
-RULE 7 — DATE OF BIRTH
-
-If the website requests:
-
-- Date of birth
-- DOB
-- Birth date
-
-add:
-
-+15
-
-------------------------------------------------------------
-
-RULE 8 — FINANCIAL INFORMATION
-
-If the page visibly requests:
-
-- Card information
-- Bank account information
-- Payment information
-
-add:
-
-+20
+This should be visible in the explanation.
 
 IMPORTANT:
 
-DO NOT CAPTURE THE ACTUAL FINANCIAL INFORMATION.
+Do NOT hardcode "net77.cc = malicious".
 
-Only detect the presence/type of the field.
+Instead:
 
-Never store:
+"net77.cc is classified in the configured unofficial streaming category."
 
-card number
-CVV
-bank credentials
-UPI PIN
-payment credentials
+The product is measuring PRIVACY EXPOSURE, not declaring criminality or malware.
 
-------------------------------------------------------------
+============================================================
+12. CATEGORY SCORE MUST NOT AUTOMATICALLY MEAN HIGH
+============================================================
 
-RULE 9 — MARKETING CONSENT
+This is important.
 
-If the website asks for marketing/promotional consent:
+A category score alone should usually not automatically produce:
 
-+8
+HIGH.
+
+Instead combine it with observable signals.
 
 Example:
 
-"Receive promotional emails"
+Unofficial streaming category:
++25
 
-"Send me offers"
-
-"Subscribe to marketing"
-
-------------------------------------------------------------
-
-RULE 10 — THIRD-PARTY DATA SHARING
-
-If the website visibly indicates that information may be shared with:
-
-- Partners
-- Advertisers
-- Third parties
-- Service providers
-
-add:
-
+Third-party trackers:
 +15
 
-Only flag this if there is an observable indication.
+Aggressive redirects:
++15
 
-Do NOT assume every third-party script means data sharing.
+Notification request:
++8
 
-------------------------------------------------------------
+Total:
+63
 
-RULE 11 — THIRD-PARTY TRACKERS
+Result:
 
-If multiple recognizable third-party tracking/analytics domains are detected:
+HIGH PRIVACY EXPOSURE
+
+This is much more defensible.
+
+============================================================
+13. PIRACY / UNOFFICIAL STREAMING WEBSITE EXAMPLE
+============================================================
+
+Example:
+
+net77.cc
+
+Observed:
+
+HTTPS
+Unofficial streaming category
+Multiple ad/tracking scripts
+External redirect
+Popup behavior
+Notification request
+
+Possible score:
+
+Category:
++25
+
+Trackers:
++15
+
+Redirect:
++10
+
+Popup behavior:
++10
+
+Notification:
++8
+
+Total:
+68
+
+Result:
+
+HIGH
+
+Show:
+
+HIGH PRIVACY EXPOSURE
+
+Why?
+
+• Unofficial streaming category
+• Multiple third-party tracking signals
+• External redirect behavior
+• Aggressive popup behavior
+• Notification permission requested
+
+This is exactly the type of explanation we want.
+
+============================================================
+14. DO NOT CALL IT "MALICIOUS"
+============================================================
+
+Unless we have a verified security threat source, DO NOT display:
+
+"MALICIOUS WEBSITE"
+
+"VIRUS DETECTED"
+
+"SCAM WEBSITE"
+
+"THIS WEBSITE WILL STEAL YOUR DATA"
+
+Those are unsupported claims.
+
+Instead display:
+
+HIGH PRIVACY EXPOSURE
+
+or:
+
+ELEVATED PRIVACY RISK
+
+And explain the observable signals.
+
+============================================================
+15. PRIVACY POLICY INTELLIGENCE
+============================================================
+
+Improve the current privacy policy rule.
+
+Current:
+
+"No privacy policy link = +15"
+
+This can create false positives.
+
+Change it to:
+
+If personal data is being collected AND no obvious privacy policy is detected:
 
 +10
 
-For the hackathon MVP maintain a small hardcoded list.
+If privacy policy exists:
 
-Example categories:
+0
 
-analytics
-advertising
-tracking
-
-Do not attempt to create a perfect tracker database.
-
-This is only a heuristic.
-
-------------------------------------------------------------
-
-RULE 12 — NO PRIVACY POLICY DETECTED
-
-If a website appears to collect personal information but no obvious privacy policy link is detected:
+If privacy policy is detected but contains observable broad data-sharing language:
 
 +10
-
-Look for links containing terms such as:
-
-privacy
-privacy-policy
-data-policy
-
-IMPORTANT:
-
-"No privacy policy detected" means:
-
-"Our extension could not find an obvious privacy policy link."
 
 Do NOT claim:
 
 "This website has no privacy policy."
 
-------------------------------------------------------------
+Say:
 
-RULE 13 — BROAD CONSENT
+"No obvious privacy policy link was detected."
 
-If the website has broad consent wording such as:
+============================================================
+16. CONSENT QUALITY
+============================================================
 
-"I agree to all purposes"
+Detect:
 
-"I agree to receive marketing"
-
-"I agree to share my data"
-
-or multiple purposes bundled into a single consent:
-
-+10
-
-------------------------------------------------------------
-
-RULE 14 — EXCESSIVE DATA COLLECTION
-
-If a form requests an unusually large number of personal data fields:
-
+Pre-checked marketing consent:
 +8
 
-For example:
+Bundled consent:
++10
 
-Name
-Email
-Phone
-DOB
-Address
-Gender
-Location
-Occupation
-etc.
+"Agree to everything" style consent:
++10
 
-Use a simple threshold such as:
+Marketing consent clearly optional:
+0
 
-5+ personal data fields
+Necessary service consent:
+0
 
-Do not treat this as proof of malicious behavior.
-
-It is simply a privacy exposure indicator.
-
-------------------------------------------------------------
-
-RULE 15 — CROSS-SITE IFRAME
-
-If the website embeds multiple external frames from different domains:
-
-+5
-
-This is only a minor signal.
+Do not treat every consent checkbox as risky.
 
 ============================================================
-6. SCORE CAP
+17. DATA MINIMIZATION
 ============================================================
 
-After calculating all applicable rules:
-
-score = sum(rule points)
-
-Then:
-
-score = Math.min(score, 100)
-
-Never allow the score to exceed 100.
-
-============================================================
-7. RISK LEVEL
-============================================================
-
-Use:
-
-0–29:
-LOW
-
-30–59:
-MEDIUM
-
-60–100:
-HIGH
+Add a simple excessive-data rule.
 
 Example:
 
-Website A:
+1–2 personal fields:
+0
 
-HTTPS
-Email
-Name
+3–4:
++5
 
-Score:
+5+:
++10
 
-5 + 3 = 8
+7+:
++15
 
-Risk:
+This represents:
 
-LOW
+"More personal information requested than appears necessary for a basic interaction."
 
-------------------------------------------------------------
+Do NOT claim that the collection is illegal.
 
-Website B:
+============================================================
+18. DOMAIN REPUTATION / CATEGORY VS PAGE SIGNALS
+============================================================
 
-HTTPS
-Email
-Phone
-Marketing consent
-Multiple trackers
+The final score should be:
 
-Score:
+BASE SCORE
++
+PAGE SIGNALS
++
+TRACKING SIGNALS
++
+BEHAVIOR SIGNALS
++
+DOMAIN CATEGORY SIGNALS
 
-5 + 10 + 8 + 10 = 33
+Example:
 
-Risk:
+BASE:
+0
 
-MEDIUM
+HTTPS:
+0
 
-------------------------------------------------------------
+Email:
+4
 
-Website C:
+Phone:
+8
 
-HTTP
-Password
-Phone
-DOB
-Marketing
-No privacy policy detected
+Trackers:
+15
 
-Score:
+Redirect:
+10
 
-30 + 40 + 10 + 15 + 8 + 10 = 113
+Unofficial streaming category:
+25
 
-Cap:
-
-100
-
-Risk:
+Total:
+62
 
 HIGH
 
 ============================================================
-8. RISK RESULT STRUCTURE
+19. RISK REASON PRIORITY
 ============================================================
 
-Create a centralized result:
+Do not show 15 reasons in the popup.
+
+Sort reasons by severity.
+
+Example:
+
+HIGH PRIVACY EXPOSURE
+Score: 68/100
+
+Top reasons:
+
+1. Unofficial streaming category
++25
+
+2. Multiple third-party tracking signals
++15
+
+3. External redirect behavior
++10
+
+4. Aggressive popup behavior
++10
+
+[View 2 more signals]
+
+============================================================
+20. WEBSITE PROFILE
+============================================================
+
+Each WebsiteRecord should store:
+
+domain
+
+displayName
+
+category
+
+riskScore
+
+riskLevel
+
+riskReasons
+
+riskSignals
+
+riskUpdatedAt
+
+Example:
 
 {
-    score: 72,
-    level: "HIGH",
+    domain: "net77.cc",
 
-    reasons: [
-        {
-            rule: "PASSWORD_OVER_HTTP",
-            points: 40,
-            title: "Credential submission over HTTP",
-            explanation: "The page contains a password field while using an unencrypted HTTP connection."
-        },
-        {
-            rule: "PHONE_COLLECTION",
-            points: 10,
-            title: "Phone number requested",
-            explanation: "The website requests additional personal information."
-        }
+    category: "unofficial_streaming",
+
+    riskScore: 68,
+
+    riskLevel: "High",
+
+    riskReasons: [
+        "Unofficial streaming category",
+        "Multiple third-party tracking signals",
+        "External redirect behavior",
+        "Aggressive popup behavior"
     ],
 
-    signals: {
-        https: false,
-        passwordField: true,
-        emailField: true,
-        phoneField: true,
-        marketingConsent: true,
-        privacyPolicyDetected: false
+    riskSignals: {
+        https: true,
+        trackerCount: 6,
+        redirects: 2,
+        popupBehavior: true,
+        notificationRequest: true
     }
 }
 
-The exact structure can be adapted to the existing project.
-
 ============================================================
-9. EXPLAINABLE RISK
+21. DO NOT TRUST CLIENT-SIDE RISK DATA BLINDLY
 ============================================================
 
-Every risk score MUST have reasons.
+Currently content.js calculates risk.
 
-Do NOT display only:
+That is acceptable for the hackathon.
 
-HIGH RISK — 78
+But ensure:
 
-Instead show:
+- Server validates the structure
+- Score cannot be arbitrary
+- Invalid risk levels are rejected
+- Unknown fields are ignored
 
-HIGH PRIVACY EXPOSURE
+Do not allow a webpage to simply send:
 
-Score: 78/100
+riskScore = 100
 
-Why?
+and become HIGH without our engine actually producing the signals.
 
-⚠ Password field detected over HTTP
-+40
-
-⚠ Phone number requested
-+10
-
-⚠ Marketing consent detected
-+8
-
-⚠ Privacy policy not clearly detected
-+10
-
-This is important for the hackathon demonstration.
+Where practical, centralize or validate risk computation.
 
 ============================================================
-10. CURRENT SITE EXTENSION UI
+22. REAL-TIME UPDATE
 ============================================================
 
-The existing extension already has:
+If a website starts as:
 
-CURRENT SITE
+LOW 18
 
-website.com
+and later behavior causes:
 
-LOW / MEDIUM / HIGH
+HIGH 67
 
-Digital Exposure Detected
+update:
 
-Email
-Name
+Extension
++
+Database
++
+Dashboard
 
-Keep the existing design.
+in real time.
 
-Replace the risk result with the new centralized risk engine.
-
-Example:
-
-CURRENT SITE
-
-leetcode.com
-
-LOW
-
-No significant privacy exposure detected.
-
-or:
-
-HIGH
-
-High privacy exposure detected.
-
-[View Risk Details]
+The same risk result must appear everywhere.
 
 ============================================================
-11. NEW WEBSITE POPUP
+23. SMART POPUP RULES REMAIN UNCHANGED
 ============================================================
 
-Add a website risk notification popup that appears when a NEW website is detected.
-
-IMPORTANT:
-
-This popup is a REPLICA of the existing RECLAIM extension popup.
-
-Do NOT create a completely different visual design.
-
-Reuse the existing extension popup design/components/styles as much as technically possible.
-
-The popup should show:
-
-RECLAIM
-
-Score: XX/100
-
-CURRENT SITE
-
-example.com
-
-HIGH / MEDIUM / LOW
-
-Risk summary
-
-Detected privacy signals
-
-Example:
-
-HIGH PRIVACY EXPOSURE
-
-⚠ Password submission over HTTP
-⚠ Phone number requested
-⚠ Marketing consent detected
-
-[Open Privacy Dashboard]
-
-============================================================
-12. NEW WEBSITE POPUP TIMING
-============================================================
-
-When a website is opened for the FIRST TIME:
-
-Show the popup automatically.
-
-Display duration:
-
-30 seconds.
-
-After 30 seconds:
-
-Automatically hide the popup.
-
-The user should also have:
-
-X / Close
-
-button.
-
-If the user closes it early:
-
-Do not repeatedly show it during the same website session unless the website qualifies as HIGH risk.
-
-============================================================
-13. NEW WEBSITE = UNIQUE DOMAIN
-============================================================
-
-The popup should follow the same domain normalization already used by website tracking.
-
-Example:
-
-youtube.com
-
-First visit:
-
-Show popup.
-
-Then:
-
-youtube.com/watch
-
-Do NOT show popup again.
-
-youtube.com/shorts
-
-Do NOT show popup again.
-
-youtube.com/feed
-
-Do NOT show popup again.
-
-The popup is associated with:
-
-normalizedDomain
-
-NOT:
-
-full URL.
-
-============================================================
-14. NORMAL WEBSITE POPUP RULE
-============================================================
-
-For LOW and MEDIUM websites:
-
-Show popup ONLY the first time the user encounters that website.
-
-Example:
-
-youtube.com
-
-First time:
-
-SHOW
-
-Second time:
-
-DO NOT SHOW
-
-100th time:
-
-DO NOT SHOW
-
-This state must persist across browser sessions.
-
-If the extension is restarted, the website should still be considered already seen.
-
-Use the existing database or persistent extension storage.
-
-Do NOT reset this state on extension restart.
-
-============================================================
-15. HIGH-RISK POPUP RULE
-============================================================
-
-HIGH RISK is different.
-
-If a website is classified as HIGH:
-
-SHOW THE POPUP EVERY TIME THE USER OPENS THAT WEBSITE.
-
-Example:
-
-example-danger.com
-
-Risk:
-HIGH
-
-Visit 1:
-SHOW
-
-Visit 2:
-SHOW
-
-Visit 3:
-SHOW
-
-Visit 100:
-SHOW
-
-This is intentional.
-
-The purpose is to continuously warn the user about a high privacy exposure website.
-
-============================================================
-16. HIGH-RISK REPEAT POPUP
-============================================================
-
-For HIGH risk websites:
-
-The popup should appear when the user navigates to / opens the website again.
-
-It should remain visible for:
-
-30 seconds
-
-unless manually closed.
-
-Do not allow duplicate popups from every tiny DOM mutation.
-
-Trigger based on meaningful navigation/page load.
-
-For normal websites:
-
-First unique-domain encounter only.
-
-For HIGH risk:
-
-Every meaningful new visit/navigation.
-
-============================================================
-17. SINGLE PAGE APPLICATIONS
-============================================================
-
-Handle SPA navigation carefully.
-
-Do NOT show 20 popups because a website changes routes internally.
-
-Use meaningful URL/domain navigation detection.
-
-For LOW/MEDIUM:
-
-Only the first domain encounter.
-
-For HIGH:
-
-Show on meaningful navigation/revisit, but debounce duplicate events.
-
-Use a reasonable debounce such as 1–2 seconds.
-
-============================================================
-18. MULTIPLE TABS
-============================================================
-
-Avoid excessive duplicate popups.
-
-Example:
-
-User opens:
-
-youtube.com in Tab 1
-youtube.com in Tab 2
-youtube.com in Tab 3
+Keep the previously implemented behavior:
 
 LOW/MEDIUM:
 
-Only first-ever domain encounter should trigger the popup.
+First unique website encounter:
+SHOW popup for 30 seconds.
+
+Revisit:
+DO NOT SHOW.
 
 HIGH:
 
-The behavior should be controlled per meaningful tab navigation, but prevent multiple popups from firing simultaneously due to the same navigation event.
+Every meaningful revisit:
+SHOW popup for 30 seconds.
 
-Use an event/session identifier if necessary.
-
-============================================================
-19. POPUP CONTENT
-============================================================
-
-The popup should contain:
-
-HEADER:
-
-RECLAIM
-
-Privacy Score:
-XX/100
-
-CURRENT SITE:
-
-domain.com
-
-Risk:
-LOW / MEDIUM / HIGH
-
-SUMMARY:
-
-Short explanation.
-
-Example LOW:
-
-"Only limited personal information signals were detected."
-
-Example MEDIUM:
-
-"This site requests several types of personal information."
-
-Example HIGH:
-
-"This site shows multiple privacy exposure signals that require attention."
-
-Then:
-
-TOP RISK SIGNALS
-
-⚠ Password over HTTP
-
-⚠ Phone number requested
-
-⚠ Marketing consent
-
-Then:
-
-DATA SIGNALS
-
-Email
-Name
-Phone
-
-Then:
-
-[Open Privacy Dashboard]
-
-and:
-
-[Close]
+This behavior must now use the NEW improved risk level.
 
 ============================================================
-20. DO NOT OVERWHELM THE USER
+24. IMPORTANT BUG TO FIX
 ============================================================
 
-Maximum:
+Currently:
 
-3–4 risk reasons
+net77.cc
 
-in the popup.
+is showing:
 
-If more reasons exist:
+CLEAN
 
-Show:
+even though it is a known unofficial streaming website and exhibits behaviors that should produce elevated privacy exposure.
 
-+4 more signals
+After this implementation, the system must evaluate:
 
-[View Full Analysis]
+1. Domain category
+2. Tracker signals
+3. Ad behavior
+4. Redirect behavior
+5. Notification requests
+6. Data collection
+7. Privacy transparency
+8. Connection security
 
-The dashboard can display the complete list.
-
-============================================================
-21. RISK COLORING
-============================================================
-
-Use the EXISTING project design system.
-
-Do not introduce random colors.
-
-The semantic meaning should be:
-
-LOW:
-existing safe/green style
-
-MEDIUM:
-existing warning/amber style
-
-HIGH:
-existing danger/red style
-
-Use the project's existing CSS variables/components where possible.
+and produce a deterministic result.
 
 ============================================================
-22. DASHBOARD
+25. TEST WEBSITES
 ============================================================
 
-The dashboard should show the same risk classification for every tracked website.
+Create a controlled test matrix.
 
-Example:
-
-DIGITAL FOOTPRINT
-
-YouTube
-LOW
-Score 12
-
-LeetCode
-MEDIUM
-Score 38
-
-UnknownSite
-HIGH
-Score 82
-
-Do NOT recalculate risk independently in the dashboard.
-
-The dashboard should use the stored risk result/signals generated by the same risk engine.
-
-============================================================
-23. WEBSITE DETAIL
-============================================================
-
-When opening a website detail:
-
-Show:
-
-Privacy Exposure
-
-HIGH
-
-82/100
-
-Why this score?
-
-1. Password field detected
-+40
-
-2. Phone number requested
-+10
-
-3. Marketing consent
-+8
-
-4. Third-party trackers
-+10
-
-5. Privacy policy not clearly detected
-+10
-
-Total:
-78
-
-Then:
-
-Recommended action:
-
-"Review what information you share with this website."
-
-If high risk:
-
-"Consider reviewing this site's privacy settings and account permissions."
-
-============================================================
-24. HIGH-RISK WARNING
-============================================================
-
-For high-risk sites, the extension popup should prominently show:
-
-HIGH PRIVACY EXPOSURE
-
-"Multiple privacy/security signals were detected on this website."
-
-Do NOT say:
-
-"THIS WEBSITE IS MALICIOUS"
-
-unless there is actual verified evidence.
-
-============================================================
-25. RISK RE-CALCULATION
-============================================================
-
-Risk should be recalculated when relevant page signals change.
-
-Example:
-
-User initially opens:
-
-example.com
-
-Score:
-20 LOW
-
-Then navigates to a page with:
-
-Password field over HTTP
-
-The risk may become:
-
-60 HIGH
-
-The stored website risk should update.
-
-If a website transitions from LOW/MEDIUM to HIGH:
-
-Treat it as HIGH from that point onward.
-
-On the next meaningful visit:
-
-The repeated high-risk popup rule applies.
-
-============================================================
-26. RISK HISTORY
-============================================================
-
-Store:
-
-currentRiskScore
-currentRiskLevel
-riskReasons
-riskSignals
-riskUpdatedAt
-
-Optionally maintain historical changes if the existing architecture supports it.
-
-Example:
-
-08 Aug:
-LOW 15
-
-09 Aug:
-MEDIUM 42
-
-This can become a future feature.
-
-Do not make it mandatory if it risks the 20-hour MVP.
-
-============================================================
-27. PRIVACY / SECURITY REQUIREMENTS
-============================================================
-
-The extension must NOT collect:
-
-- Password values
-- OTP values
-- Credit card numbers
-- CVV
-- Bank passwords
-- Authentication tokens
-- Session cookies
-
-Only detect the presence/type of fields.
-
-Example:
-
-GOOD:
-
-phoneFieldDetected = true
-
-BAD:
-
-phoneNumber = "9399928725"
-
-Never store the actual value.
-
-============================================================
-28. PERFORMANCE
-============================================================
-
-Risk analysis must not make websites slow.
-
-Do not continuously scan the entire DOM every few milliseconds.
-
-Use:
-
-- Initial scan
-- MutationObserver only where required
-- Debouncing
-- Lightweight selectors
-- Limited scanning frequency
-
-Avoid expensive processing.
-
-============================================================
-29. CENTRAL RISK ENGINE
-============================================================
-
-Create ONE risk engine.
-
-For example:
-
-riskEngine.js
-
-with a function conceptually similar to:
-
-calculatePrivacyRisk(siteSignals)
-
-returns:
-
-{
-    score,
-    level,
-    reasons,
-    signals
-}
-
-The extension uses it.
-
-The dashboard uses the resulting stored data.
-
-Do NOT duplicate this logic across:
-
-extension.js
-dashboard.js
-backend.js
-
-============================================================
-30. TEST CASES
-============================================================
-
-TEST 1 — LOW WEBSITE
-
-Website:
+TEST A — SIMPLE LOW RISK
 
 HTTPS
 Name
@@ -1211,273 +819,366 @@ Email
 
 Expected:
 
-Score approximately:
-8
-
-Risk:
 LOW
-
-First visit:
-
-Popup appears for 30 seconds.
-
-Second visit:
-
-Popup does not appear.
 
 ------------------------------------------------
 
-TEST 2 — MEDIUM WEBSITE
-
-Website:
+TEST B — MEDIUM PRIVACY EXPOSURE
 
 HTTPS
 Name
 Email
 Phone
-Marketing consent
-Multiple trackers
+Marketing
+Several trackers
 
 Expected:
 
 MEDIUM
 
-First visit:
-
-Popup appears.
-
-Second visit:
-
-Popup does not appear.
-
 ------------------------------------------------
 
-TEST 3 — HIGH WEBSITE
-
-Website:
+TEST C — HIGH SECURITY SIGNAL
 
 HTTP
 Password
 Phone
 DOB
-Marketing
-No obvious privacy policy
+No privacy policy
 
 Expected:
 
 HIGH
 
-First visit:
+------------------------------------------------
 
-Popup appears.
+TEST D — UNOFFICIAL STREAMING
 
-Second visit:
-
-Popup appears again.
-
-Third visit:
-
-Popup appears again.
-
-============================================================
-31. POPUP TIMING TEST
-============================================================
-
-LOW/MEDIUM:
-
-First visit:
-SHOW
-
-After 30 seconds:
-HIDE
-
-Revisit:
-NO POPUP
-
-HIGH:
-
-First visit:
-SHOW
-
-After 30 seconds:
-HIDE
-
-Revisit:
-SHOW AGAIN
-
-============================================================
-32. PERSISTENCE TEST
-============================================================
-
-LOW website:
-
-Visit once.
-
-Close Chrome.
-
-Open Chrome.
-
-Visit again.
+Known configured category
+Multiple trackers
+Ad behavior
+Redirect
 
 Expected:
 
-No popup.
+HIGH or at minimum MEDIUM depending on observed signals.
 
-HIGH website:
+------------------------------------------------
 
-Visit once.
+TEST E — NORMAL MAJOR WEBSITE
 
-Close Chrome.
-
-Open Chrome.
-
-Visit again.
+HTTPS
+Privacy policy
+Limited data collection
+Few trackers
 
 Expected:
 
-Popup appears again.
+LOW or MEDIUM.
+
+IMPORTANT:
+
+Do NOT automatically classify all large websites as LOW.
+
+Risk is based on the actual rules.
 
 ============================================================
-33. FINAL ACCEPTANCE CRITERIA
+26. FALSE POSITIVE PROTECTION
 ============================================================
 
-[ ] Every website gets a deterministic risk score.
+Do not make the system:
 
-[ ] Risk score is 0–100.
+"Unknown website = HIGH"
 
-[ ] LOW = 0–29.
+That would make the product useless.
 
-[ ] MEDIUM = 30–59.
+Unknown websites should start from:
 
-[ ] HIGH = 60–100.
+LOW
 
-[ ] Risk rules are hardcoded and documented.
+and gain risk points only from detected signals.
 
-[ ] Risk reasons are shown.
+Similarly:
 
-[ ] Same risk engine is used everywhere.
+HTTPS does not mean LOW.
 
-[ ] Extension displays risk.
+Unknown does not mean HIGH.
 
-[ ] Dashboard displays same risk.
+Category alone should usually not be enough for HIGH.
 
-[ ] New LOW/MEDIUM website triggers popup once.
+============================================================
+27. DOMAIN CATEGORY DATABASE
+============================================================
 
-[ ] Popup remains visible for 30 seconds.
+Create categories such as:
 
-[ ] Popup can be manually closed.
+official_service
 
-[ ] LOW/MEDIUM website does not trigger popup again.
+shopping
 
-[ ] HIGH website triggers popup on every meaningful revisit.
+social_media
 
-[ ] HIGH popup remains for 30 seconds.
+finance
 
-[ ] Multiple tabs do not create excessive duplicate popups.
+education
 
-[ ] SPA navigation is debounced.
+news
 
-[ ] Domain normalization is respected.
+streaming
 
-[ ] Risk data persists.
+unofficial_streaming
 
-[ ] Existing website count continues working.
+download_portal
 
-[ ] Existing exposure count continues working.
+ad_heavy
 
-[ ] Existing dashboard synchronization continues working.
+unknown
 
-[ ] Existing UI design is preserved.
+These categories should NOT automatically determine the entire score.
+
+They provide contextual signals.
+
+============================================================
+28. FUTURE EXTENSIBILITY
+============================================================
+
+Structure the rule engine so that later we can replace the hardcoded domain database with:
+
+- Threat intelligence API
+- URL reputation service
+- Safe Browsing API
+- Privacy policy intelligence
+- ML classifier
+
+But for the hackathon:
+
+USE ONLY OUR DETERMINISTIC LOCAL RULES.
+
+============================================================
+29. DEBUG MODE
+============================================================
+
+Add a developer-only risk breakdown.
+
+Example:
+
+DOMAIN:
+net77.cc
+
+CATEGORY:
+unofficial_streaming
+
+CATEGORY SCORE:
++25
+
+HTTP:
+NO
+
+PASSWORD:
+NO
+
+EMAIL:
+NO
+
+PHONE:
+NO
+
+TRACKERS:
+6
++15
+
+REDIRECTS:
+2
++10
+
+POPUP BEHAVIOR:
+YES
++10
+
+NOTIFICATION:
+YES
++8
+
+TOTAL:
+68
+
+LEVEL:
+HIGH
+
+This will make debugging extremely easy.
+
+============================================================
+30. IMPORTANT — CHECK WHY CURRENT NET77.CC IS CLEAN
+============================================================
+
+Before changing the code, reproduce:
+
+net77.cc
+
+Then log every risk signal currently detected.
+
+I want to know:
+
+Current score:
+?
+
+Current signals:
+?
+
+Tracker count:
+?
+
+Redirect count:
+?
+
+Popup behavior:
+?
+
+Notification:
+?
+
+Category:
+?
+
+Current reasons:
+?
+
+Explain exactly why the current engine produces CLEAN.
+
+Then implement the improved engine.
+
+============================================================
+31. DO NOT BREAK EXISTING FEATURES
+============================================================
+
+Preserve:
+
+- Unique website count
+- Unique exposure count
+- Dashboard synchronization
+- SSE
+- Extension popup
+- Website activity
+- Existing dashboard
+- Existing Privacy Score
+- Existing login detection
+- Existing ShopEase demo
+- Existing UI
+- 30-second popup
+- HIGH-risk repeated popup behavior
+
+Only improve the risk intelligence layer.
+
+============================================================
+32. FINAL ACCEPTANCE CRITERIA
+============================================================
+
+[ ] Risk is not based only on DOM form fields.
+
+[ ] HTTPS does not automatically mean LOW.
+
+[ ] Unknown website does not automatically mean HIGH.
+
+[ ] Domain category intelligence exists.
+
+[ ] Unofficial streaming category is supported.
+
+[ ] Tracker behavior contributes to score.
+
+[ ] Redirect behavior contributes to score.
+
+[ ] Popup/ad behavior contributes to score.
+
+[ ] Notification permission contributes to score.
+
+[ ] Privacy transparency contributes to score.
+
+[ ] Data collection contributes to score.
+
+[ ] Consent quality contributes to score.
+
+[ ] All scoring remains deterministic.
+
+[ ] Every score has explainable reasons.
+
+[ ] Risk is stored with WebsiteRecord.
+
+[ ] Extension and dashboard show the same risk.
+
+[ ] High-risk websites trigger the repeated popup.
+
+[ ] Low/medium websites trigger popup only once.
 
 [ ] No passwords are captured.
 
-[ ] No credentials are stored.
-
 [ ] No payment information is captured.
 
-[ ] Website performance is not significantly affected.
+[ ] No unsupported "malicious" claims are made.
+
+[ ] net77.cc no longer automatically shows CLEAN if its configured category and observed signals meet the risk threshold.
+
+[ ] The risk breakdown can be inspected in developer mode.
 
 ============================================================
-34. IMPLEMENTATION PROCESS
+33. IMPLEMENTATION ORDER
 ============================================================
 
-BEFORE CODING:
+FIRST:
 
-1. Inspect the existing extension.
-2. Inspect the current popup implementation.
-3. Inspect website tracking.
-4. Inspect domain normalization.
-5. Inspect dashboard website records.
-6. Identify where risk information currently exists.
-7. Identify reusable UI components.
+Inspect the current risk engine.
 
-Then:
+SECOND:
 
-8. Create centralized risk rules.
-9. Create centralized risk engine.
-10. Connect website detection to risk engine.
-11. Store risk result with website record.
-12. Connect extension popup.
-13. Implement first-visit popup logic.
-14. Implement 30-second timer.
-15. Implement HIGH-risk repeated popup logic.
-16. Connect dashboard.
-17. Test all risk categories.
-18. Test persistence.
-19. Test multiple tabs.
-20. Test SPA navigation.
-21. Verify existing functionality.
+Reproduce net77.cc.
 
-============================================================
-35. IMPORTANT — DO NOT REDESIGN
-============================================================
+THIRD:
 
-Keep the existing:
+Explain why it currently gets CLEAN.
 
-RECLAIM extension visual design.
+FOURTH:
 
-Keep the existing:
+Create the domain intelligence module.
 
-PrivacyLens dashboard visual design.
+FIFTH:
 
-The task is to add:
+Create behavior detection signals.
 
-RISK ENGINE
-+
-RISK REASONS
-+
-SMART POPUP BEHAVIOR
+SIXTH:
 
-not to redesign the entire product.
+Improve tracker detection.
 
-============================================================
-36. FINAL OUTPUT
-============================================================
+SEVENTH:
 
-Before making code changes, report:
+Update the centralized risk calculation.
 
-1. Existing extension architecture
-2. Existing website tracking architecture
-3. Existing popup architecture
-4. Existing dashboard architecture
-5. Files that need modification
-6. Proposed risk engine
-7. Proposed data structure
-8. Popup trigger logic
-9. Persistence strategy
-10. Potential conflicts with existing features
+EIGHTH:
 
-Then implement the feature.
+Store the new risk result.
 
-After implementation report:
+NINTH:
 
-- Files changed
-- Risk rules implemented
-- Popup behavior implemented
-- Tests performed
-- Bugs found
-- Bugs fixed
-- Any limitations
-- Exact manual testing steps
+Update extension popup.
 
-The final implementation must be deterministic, explainable, persistent, performant, and integrated with the existing PrivacyLens/RECLAIM architecture.
+TENTH:
+
+Update dashboard.
+
+ELEVENTH:
+
+Test LOW/MEDIUM/HIGH.
+
+TWELFTH:
+
+Test net77.cc and other configured unofficial streaming demo domains.
+
+THIRTEENTH:
+
+Verify popup rules.
+
+FOURTEENTH:
+
+Verify realtime synchronization.
+
+Do NOT rewrite the entire extension.
+
+Make the smallest architecture-consistent changes necessary.
