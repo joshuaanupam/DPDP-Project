@@ -8,28 +8,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshUI();
 
   // Listen for real-time storage updates
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode || changes.session)) {
-      refreshUI();
-    }
-  });
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' && (changes.recentWebsiteVisits || changes.exposures || changes.demoMode || changes.session)) {
+        refreshUI();
+      }
+    });
+  }
 
   // Listen for runtime message updates
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'DATA_UPDATED' || message.type === 'EVENTS_UPDATED') {
-      refreshUI();
-    }
-  });
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'DATA_UPDATED' || message.type === 'EVENTS_UPDATED') {
+        refreshUI();
+      }
+    });
+  }
 
   // Listen for active tab switching while popup is open
-  if (chrome.tabs && chrome.tabs.onActivated) {
+  if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.onActivated) {
     chrome.tabs.onActivated.addListener(() => {
       refreshUI();
     });
   }
 
   // Listen for tab navigation/refresh while popup is open
-  if (chrome.tabs && chrome.tabs.onUpdated) {
+  if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.onUpdated) {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.status === 'complete' && tab.active) {
         refreshUI();
@@ -42,7 +46,9 @@ function setupEventListeners() {
   const btnDashboard = document.getElementById('btn-open-dashboard');
   if (btnDashboard) {
     btnDashboard.addEventListener('click', () => {
-      chrome.tabs.create({ url: 'http://localhost:5173' });
+      if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.create) {
+        chrome.tabs.create({ url: 'http://localhost:5173' });
+      }
     });
   }
 
@@ -50,8 +56,12 @@ function setupEventListeners() {
   if (toggleChildSafe) {
     toggleChildSafe.addEventListener('change', async (e) => {
       const enabled = e.target.checked;
-      await chrome.storage.local.set({ childSafeMode: enabled });
-      chrome.runtime.sendMessage({ type: 'TOGGLE_CHILD_SAFE_MODE', enableChildSafeMode: enabled }).catch(() => {});
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ childSafeMode: enabled });
+      }
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ type: 'TOGGLE_CHILD_SAFE_MODE', enableChildSafeMode: enabled }).catch(() => {});
+      }
       refreshUI();
     });
   }
@@ -59,7 +69,9 @@ function setupEventListeners() {
   const btnLoginRedirect = document.getElementById('btn-login-redirect');
   if (btnLoginRedirect) {
     btnLoginRedirect.addEventListener('click', () => {
-      chrome.tabs.create({ url: 'http://localhost:5173' });
+      if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.create) {
+        chrome.tabs.create({ url: 'http://localhost:5173' });
+      }
     });
   }
 
@@ -67,17 +79,19 @@ function setupEventListeners() {
   if (btnRefreshBrief) {
     btnRefreshBrief.addEventListener('click', async () => {
       try {
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTab && activeTab.url && !isInternalUrl(activeTab.url)) {
-          const urlObj = new URL(activeTab.url);
-          const domain = normalizeDomain(urlObj.hostname);
-          const activeTabState = {
-            domain: domain,
-            url: activeTab.url,
-            title: activeTab.title || urlObj.hostname,
-            status: 'success'
-          };
-          await loadWebsiteBrief(activeTabState, activeTab.id, true);
+        if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (activeTab && activeTab.url && !isInternalUrl(activeTab.url)) {
+            const urlObj = new URL(activeTab.url);
+            const domain = normalizeDomain(urlObj.hostname);
+            const activeTabState = {
+              domain: domain,
+              url: activeTab.url,
+              title: activeTab.title || urlObj.hostname,
+              status: 'success'
+            };
+            await loadWebsiteBrief(activeTabState, activeTab.id, true);
+          }
         }
       } catch (err) {
         console.error('Refresh brief click error:', err);
@@ -152,22 +166,25 @@ async function refreshUI() {
   let activeTabId = null;
 
   try {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!activeTab || !activeTab.url) {
-      activeTabState.status = 'error';
-    } else if (isInternalUrl(activeTab.url)) {
-      activeTabState.status = 'unsupported-page';
-      activeTabState.url = activeTab.url;
-      activeTabState.title = activeTab.title || 'Browser Internal Page';
+    if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab || !activeTab.url) {
+        activeTabState.status = 'error';
+      } else if (isInternalUrl(activeTab.url)) {
+        activeTabState.status = 'unsupported-page';
+        activeTabState.url = activeTab.url;
+        activeTabState.title = activeTab.title || 'Browser Internal Page';
+      } else {
+        activeTabId = activeTab.id;
+        const urlObj = new URL(activeTab.url);
+        activeTabState.status = 'success';
+        activeTabState.domain = normalizeDomain(urlObj.hostname);
+        activeTabState.url = activeTab.url;
+        activeTabState.title = activeTab.title || urlObj.hostname;
+        activeTabState.protocol = urlObj.protocol.replace(':', '').toUpperCase();
+      }
     } else {
-      activeTabId = activeTab.id;
-      const urlObj = new URL(activeTab.url);
-      activeTabState.status = 'success';
-      activeTabState.domain = normalizeDomain(urlObj.hostname);
-      activeTabState.url = activeTab.url;
-      activeTabState.title = activeTab.title || urlObj.hostname;
-      activeTabState.protocol = urlObj.protocol.replace(':', '').toUpperCase();
+      activeTabState.status = 'error';
     }
   } catch (e) {
     activeTabState.status = 'error';
@@ -176,17 +193,24 @@ async function refreshUI() {
   // Request authoritative single source of truth state from background.js
   let extState = null;
   try {
-    extState = await chrome.runtime.sendMessage({
-      type: 'GET_EXTENSION_STATE',
-      domain: activeTabState.domain
-    });
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      extState = await chrome.runtime.sendMessage({
+        type: 'GET_EXTENSION_STATE',
+        domain: activeTabState.domain
+      });
+    }
   } catch (e) {
     extState = null;
   }
 
   // Fallback to local storage if background worker response is empty
   if (!extState) {
-    const storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'visitedWebsites', 'webCount', 'exposureCount']);
+    let storage = {};
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        storage = await chrome.storage.local.get(['exposures', 'recentWebsiteVisits', 'demoMode', 'childSafeMode', 'visitedWebsites', 'webCount', 'exposureCount']);
+      } catch (e) {}
+    }
     const visitedArr = storage.visitedWebsites || [];
     extState = {
       webCount: typeof storage.webCount === 'number' ? storage.webCount : visitedArr.length,
@@ -224,7 +248,7 @@ async function refreshUI() {
   }
 
   // Send query message to content script on active tab for real-time DOM script/ad-tech parsing (OPTIONAL — Safe Fallback on Failure)
-  if (activeTabId && activeTabState.status === 'success') {
+  if (typeof chrome !== 'undefined' && chrome.tabs && activeTabId && activeTabState.status === 'success') {
     try {
       const trackingRes = await new Promise((resolve) => {
         try {
@@ -538,7 +562,12 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
 
   // 2. Strict Domain-Keyed Cache Check: privacylens_summary_<domain>
   const cacheKey = `privacylens_summary_${normDomain}`;
-  const storage = await chrome.storage.local.get([cacheKey, 'websiteSummaries']);
+  let storage = {};
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    try {
+      storage = await chrome.storage.local.get([cacheKey, 'websiteSummaries']);
+    } catch (e) {}
+  }
   const summariesMap = storage.websiteSummaries || {};
   const cachedData = storage[cacheKey] || summariesMap[normDomain];
 
@@ -571,7 +600,7 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
     headings: []
   };
 
-  if (activeTabId) {
+  if (typeof chrome !== 'undefined' && chrome.tabs && activeTabId) {
     try {
       const response = await new Promise((resolve) => {
         try {
@@ -632,10 +661,12 @@ async function loadWebsiteBrief(activeTabState, activeTabId, forceRefresh = fals
 
       // Save to cache using strict key privacylens_summary_<domain>
       summariesMap[normDomain] = summaryPayload;
-      await chrome.storage.local.set({
-        [cacheKey]: summaryPayload,
-        websiteSummaries: summariesMap
-      });
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({
+          [cacheKey]: summaryPayload,
+          websiteSummaries: summariesMap
+        });
+      }
 
       // Update UI
       siteTitle.textContent = data.websiteName || normDomain;

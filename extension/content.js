@@ -950,6 +950,79 @@ try {
 } catch (e) {}
 
 
+// --- SHARED AUTHENTICATION SYNC WITH WEB DASHBOARD ---
+function checkIsDashboard() {
+  return window.location.port === '5173' || 
+         window.location.port === '5174' || 
+         window.location.hostname === 'localhost' || 
+         window.location.hostname === '127.0.0.1' ||
+         (document.title && document.title.includes('PrivacyLens'));
+}
+
+// Listen for active queries from page (registered unconditionally)
+window.addEventListener('message', async (event) => {
+  const message = event.data;
+  if (message && message.direction === 'from-page') {
+    console.log('[RECLAIM Content Script] Received message from page:', message);
+    if (!checkIsDashboard()) {
+      console.log('[RECLAIM Content Script] checkIsDashboard failed for:', window.location.href);
+      return;
+    }
+
+    if (message.type === 'GetExtensionSession') {
+      try {
+        const data = await chrome.storage.local.get(['session']);
+        console.log('[RECLAIM Content Script] Sending ExtensionSessionResponse:', data.session);
+        window.postMessage({
+          direction: 'from-content-script',
+          type: 'ExtensionSessionResponse',
+          detail: data.session || null
+        }, '*');
+      } catch (err) {
+        console.error('Failed to get session from extension:', err);
+      }
+    } else if (message.type === 'SetExtensionSession') {
+      try {
+        if (message.detail) {
+          console.log('[RECLAIM Content Script] Saving session to storage:', message.detail);
+          await chrome.storage.local.set({ session: message.detail });
+        }
+      } catch (err) {
+        console.error('Failed to save session in extension:', err);
+      }
+    } else if (message.type === 'ClearExtensionSession') {
+      try {
+        console.log('[RECLAIM Content Script] Clearing session from storage');
+        await chrome.storage.local.remove(['session']);
+      } catch (err) {
+        console.error('Failed to clear session in extension:', err);
+      }
+    } else if (message.type === 'PingExtension') {
+      console.log('[RECLAIM Content Script] Received PingExtension, replying with PongExtension...');
+      window.postMessage({
+        direction: 'from-content-script',
+        type: 'PongExtension'
+      }, '*');
+    }
+  }
+});
+
+// Startup Broadcast: Immediately push current session state to avoid race conditions
+(async () => {
+  if (!checkIsDashboard()) return;
+  try {
+    const data = await chrome.storage.local.get(['session']);
+    window.postMessage({
+      direction: 'from-content-script',
+      type: 'ExtensionSessionResponse',
+      detail: data.session || null
+    }, '*');
+  } catch (err) {
+    console.error('Failed to broadcast initial session on load:', err);
+  }
+})();
+
+
 // ============================================================
 // SECTION 2: Auto-Show PrivacyLens Overlay
 // Injects the EXACT same UI from popup.html + popup.js into every page
