@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { calculateAndSavePrivacyScore } = require('../utils/privacyScore');
+const realtimeController = require('./realtimeController');
 
 /**
  * POST /api/events
@@ -9,7 +10,7 @@ const { calculateAndSavePrivacyScore } = require('../utils/privacyScore');
  */
 exports.handleEvent = async (req, res) => {
   try {
-    const { userId: reqUserId, domain, siteName, detectedFields = [], consents = [] } = req.body;
+    const { userId: reqUserId, domain, siteName, detectedFields = [], consents = [], eventType } = req.body;
 
     if (!domain) {
       return res.status(400).json({ success: false, message: 'Domain is required.' });
@@ -124,6 +125,47 @@ exports.handleEvent = async (req, res) => {
         description: `Privacy activity detected on ${website.name} (${website.domain}). Data types detected: ${detectedFields.join(', ') || 'None'}.`
       }
     });
+
+    // Centralized WebsiteRecord logic
+    const isLoginEvent = eventType === 'FORM_SUBMISSION' || eventType === 'ACCOUNT_CREATED';
+    const existingRecord = await prisma.websiteRecord.findUnique({
+      where: {
+        userId_domain: {
+          userId,
+          domain: normalizedDomain
+        }
+      }
+    });
+
+    if (existingRecord) {
+      await prisma.websiteRecord.update({
+        where: { id: existingRecord.id },
+        data: {
+          lastSeenAt: new Date(),
+          loginDetected: existingRecord.loginDetected || isLoginEvent,
+          riskScore: req.body.riskScore !== undefined ? Number(req.body.riskScore) : existingRecord.riskScore,
+          riskLevel: req.body.riskLevel || existingRecord.riskLevel,
+          riskReasons: req.body.riskReasons ? JSON.stringify(req.body.riskReasons) : existingRecord.riskReasons
+        }
+      });
+    } else {
+      await prisma.websiteRecord.create({
+        data: {
+          userId,
+          domain: normalizedDomain,
+          displayName: cleanSiteName,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+          loginDetected: isLoginEvent,
+          riskScore: req.body.riskScore !== undefined ? Number(req.body.riskScore) : 8,
+          riskLevel: req.body.riskLevel || 'Low',
+          riskReasons: req.body.riskReasons ? JSON.stringify(req.body.riskReasons) : '[]'
+        }
+      });
+    }
+
+    // Push counts update to connected SSE streams in real-time
+    realtimeController.sendUpdateToUser(userId);
 
     return res.status(201).json({
       success: true,

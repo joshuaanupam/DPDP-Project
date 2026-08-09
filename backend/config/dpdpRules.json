@@ -1,0 +1,7 @@
+{
+  "baseFailureToPreventBreach": 50000000,
+  "perPrincipalIncrementalFine": 100,
+  "maxFailureToPreventBreach": 2500000000,
+  "failureToReportBoard": 1500000000,
+  "failureToNotifyPrincipals": 1000000000
+}

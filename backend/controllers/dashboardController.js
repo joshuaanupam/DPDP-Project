@@ -29,34 +29,50 @@ exports.getDashboardData = async (req, res) => {
     // Recalculate privacy score dynamically
     const currentPrivacyScore = await calculateAndSavePrivacyScore(prisma, userId);
 
-    // Fetch all user data items, consents, privacy requests, and associated websites
+    // Fetch all user data items, consents, privacy requests
     const dataItems = await prisma.dataItem.findMany({ where: { userId } });
     const consents = await prisma.consent.findMany({ where: { userId } });
     const requests = await prisma.privacyRequest.findMany({ where: { userId } });
 
-    // Collect all distinct website IDs
-    const websiteIdsSet = new Set([
-      ...dataItems.map(d => d.websiteId),
-      ...consents.map(c => c.websiteId),
-      ...requests.map(r => r.websiteId)
-    ]);
-    const websiteIds = Array.from(websiteIdsSet);
+    // Fetch user visited websites records as the single source of truth
+    const userWebsites = await prisma.websiteRecord.findMany({ where: { userId } });
+    const domains = userWebsites.map(w => w.domain);
 
+    // Fetch details of those websites from the global Website catalog
     const websites = await prisma.website.findMany({
-      where: { id: { in: websiteIds } }
+      where: { domain: { in: domains } }
     });
 
-    const activeConsentsCount = consents.filter(c => c.status === 'ACTIVE').length;
+    const activeConsentsCount = await prisma.websiteRecord.count({
+      where: { userId, loginDetected: true }
+    });
     const pendingRequestsCount = requests.filter(r => r.status === 'SUBMITTED' || r.status === 'AWAITING_RESPONSE').length;
 
+    // Fetch nominees for trusted contact system
     const nominees = await prisma.nominee.findMany({ where: { userId } });
+
+    // Fetch breaches affecting user's visited websites
+    const websiteIds = websites.map(w => w.id);
     const breaches = await prisma.dataBreach.findMany({
       where: { websiteId: { in: websiteIds } },
       include: { website: true }
     });
 
-    // Format digital footprint website grid data
-    const formattedWebsites = websites.map(site => {
+    // Format digital footprint website grid data based on User's visited websites
+    const formattedWebsites = userWebsites.map(userSite => {
+      const site = websites.find(w => w.domain === userSite.domain) || {
+        id: userSite.id,
+        domain: userSite.domain,
+        name: userSite.displayName,
+        category: 'General',
+        riskLevel: 'Medium',
+        deletionTier: 2,
+        directApiUrl: null,
+        guidedUrl: `https://${userSite.domain}/privacy`,
+        faviconUrl: null,
+        isSDF: false
+      };
+
       const siteDataItems = dataItems.filter(d => d.websiteId === site.id);
       const siteConsents = consents.filter(c => c.websiteId === site.id);
       const siteRequests = requests.filter(r => r.websiteId === site.id);
@@ -65,17 +81,31 @@ exports.getDashboardData = async (req, res) => {
         .filter(c => c.status === 'ACTIVE')
         .map(c => c.consentType);
 
+      // Fallback active consent name to display in the grid if login is detected but no consents logged
+      if (userSite.loginDetected && activeConsentNames.length === 0) {
+        activeConsentNames.push('Account Access');
+      }
+
+      let parsedReasons = [];
+      try {
+        parsedReasons = JSON.parse(userSite.riskReasons || '[]');
+      } catch (e) {
+        parsedReasons = [];
+      }
+
       return {
         id: site.id,
         domain: site.domain,
         name: site.name,
         category: site.category,
-        riskLevel: site.riskLevel,
+        riskLevel: userSite.riskLevel || site.riskLevel || 'Medium',
+        riskScore: userSite.riskScore,
+        riskReasons: parsedReasons,
         deletionTier: site.deletionTier,
         directApiUrl: site.directApiUrl,
         guidedUrl: site.guidedUrl,
         faviconUrl: site.faviconUrl,
-        isSDF: site.isSDF,
+        isSDF: site.isSDF || false,
         dataItems: siteDataItems.map(d => d.dataType),
         activeConsents: activeConsentNames,
         consents: siteConsents.map(c => ({
@@ -107,7 +137,7 @@ exports.getDashboardData = async (req, res) => {
         parentEmail: user.parentEmail
       },
       stats: {
-        totalWebsites: websites.length,
+        totalWebsites: userWebsites.length,
         activeConsents: activeConsentsCount,
         pendingRequests: pendingRequestsCount
       },

@@ -219,6 +219,44 @@ async function runSeed(prismaInstance) {
     ]
   });
 
+  // 7. Create Visited WebsiteRecords
+  await db.websiteRecord.createMany({
+    data: [
+      {
+        userId: user.id,
+        domain: 'shopease.com',
+        displayName: 'ShopEase',
+        loginDetected: true,
+        firstSeenAt: new Date(Date.now() - 172800000),
+        lastSeenAt: new Date(Date.now() - 86400000)
+      },
+      {
+        userId: user.id,
+        domain: 'socialhub.io',
+        displayName: 'SocialHub',
+        loginDetected: true,
+        firstSeenAt: new Date(Date.now() - 129600000),
+        lastSeenAt: new Date(Date.now() - 129600000)
+      },
+      {
+        userId: user.id,
+        domain: 'clouddata.net',
+        displayName: 'CloudData Services',
+        loginDetected: true,
+        firstSeenAt: new Date(Date.now() - 43200000),
+        lastSeenAt: new Date(Date.now() - 43200000)
+      },
+      {
+        userId: user.id,
+        domain: 'quickbuy.in',
+        displayName: 'QuickBuy Retail',
+        loginDetected: false,
+        firstSeenAt: new Date(Date.now() - 21600000),
+        lastSeenAt: new Date(Date.now() - 21600000)
+      }
+    ]
+  });
+
   console.log('✅ Database Seeding Completed Successfully!');
 }
 

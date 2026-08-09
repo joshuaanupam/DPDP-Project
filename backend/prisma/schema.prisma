@@ -8,19 +8,26 @@ generator client {
 }
 
 model User {
-  id           String           @id @default(uuid())
-  name         String
-  email        String           @unique
-  passwordHash String
-  privacyScore Int              @default(85)
-  isChild      Boolean          @default(false)
-  parentEmail  String?
-  createdAt    DateTime         @default(now())
-  dataItems    DataItem[]
-  consents     Consent[]
-  requests     PrivacyRequest[]
-  auditLogs    AuditLog[]
-  nominees     Nominee[]
+  id               String           @id @default(uuid())
+  name             String
+  email            String           @unique
+  passwordHash     String
+  privacyScore     Int              @default(85)
+  dob              DateTime?
+  guardianId       String?
+  guardianEmail    String?
+  nomineeName      String?
+  nomineeEmail     String?
+  nomineeConfirmed Boolean?
+  isChild          Boolean          @default(false)
+  parentEmail      String?
+  createdAt        DateTime         @default(now())
+  dataItems        DataItem[]
+  consents         Consent[]
+  requests         PrivacyRequest[]
+  auditLogs        AuditLog[]
+  visitedWebsites  WebsiteRecord[]
+  nominees         Nominee[]
 }
 
 model Nominee {
@@ -32,6 +39,16 @@ model Nominee {
   confirmed    Boolean  @default(false)
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Breach {
+  id                 String   @id @default(uuid())
+  orgId              String
+  description        String
+  affectedCount      Int
+  reportedToBoard    Boolean
+  principalsNotified Boolean
+  createdAt          DateTime @default(now())
 }
 
 model Website {
@@ -108,4 +125,22 @@ model AuditLog {
   timestamp   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   website     Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model WebsiteRecord {
+  id            String   @id @default(uuid())
+  userId        String
+  domain        String
+  displayName   String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  loginDetected Boolean  @default(false)
+  riskScore     Int      @default(8)
+  riskLevel     String   @default("Low")
+  riskReasons   String   @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
 }

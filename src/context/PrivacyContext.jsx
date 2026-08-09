@@ -443,6 +443,33 @@ export const PrivacyProvider = ({ children }) => {
     };
   }, []);
 
+  // SSE Real-time Updates Listener for single source of truth sync
+  React.useEffect(() => {
+    if (!userData || !userData.id) return;
+
+    console.log(`[PrivacyLens Dashboard] Connecting to SSE realtime endpoint for user ${userData.id}...`);
+    const sse = new EventSource(`http://localhost:5000/api/realtime/${userData.id}`);
+
+    sse.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[PrivacyLens Dashboard] Realtime update received:', data);
+
+        // Fetch latest metrics and visited websites list from DB to render grid and stats live
+        fetchDashboardData(userData.id);
+        fetchRequests(userData.id);
+        fetchAuditLogs(userData.id);
+      } catch (err) {
+        console.error('[PrivacyLens Dashboard] Error parsing realtime SSE payload:', err);
+      }
+    };
+
+    return () => {
+      console.log('[PrivacyLens Dashboard] Closing SSE realtime connection...');
+      sse.close();
+    };
+  }, [userData?.id]);
+
   // Calculate local privacy score fallback if Extension sync not active
   const privacyScore = useMemo(() => {
     if (extensionData.isExtensionSynced) {
@@ -466,14 +493,13 @@ export const PrivacyProvider = ({ children }) => {
 
     let activeConsentsCount = 0;
     if (extensionData.isExtensionSynced) {
-      Object.values(extensionData.exposures).forEach(exp => {
-        activeConsentsCount += (exp.consentTypes || []).length;
-      });
+      activeConsentsCount = extensionData.exposureCount;
+    } else if (backendActive) {
+      activeConsentsCount = userData.activeConsents || 0;
     } else {
       websites.forEach(site => {
-        (site.consents || []).forEach(c => {
-          if (c.status === 'ACTIVE') activeConsentsCount++;
-        });
+        const hasActiveConsent = (site.consents || []).some(c => c.status === 'ACTIVE');
+        if (hasActiveConsent) activeConsentsCount++;
       });
     }
 
@@ -486,7 +512,7 @@ export const PrivacyProvider = ({ children }) => {
       pendingRequests: pendingRequestsCount,
       privacyScore: activeScore
     };
-  }, [websites, requests, privacyScore, extensionData]);
+  }, [websites, requests, privacyScore, extensionData, backendActive, userData]);
 
   // Filtered websites
   const filteredWebsites = useMemo(() => {

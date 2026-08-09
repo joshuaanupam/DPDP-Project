@@ -29,8 +29,8 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
     <aside className="w-60 bg-white dark:bg-zinc-950 border-r border-beige-400/60 dark:border-zinc-800 flex flex-col h-screen sticky top-0 shrink-0 font-sans z-30">
       {/* Top logo area */}
       <div className="p-5 flex items-center space-x-2.5 border-b border-beige-400/20 dark:border-zinc-800/40">
-        <div className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-tr from-beige-900 to-beige-700 shadow-md shadow-beige-900/20">
-          <Shield className="w-5 h-5 text-beige-50 dark:text-zinc-950" />
+        <div className="relative">
+          <img src="/privacylens-logo.svg" alt="PrivacyLens" className="w-9 h-9 rounded-lg shadow-md shadow-beige-900/20 object-cover" />
           <Sparkles className="w-2.5 h-2.5 text-beige-300 absolute -top-0.5 -right-0.5 animate-pulse" />
         </div>
         <div>
