@@ -876,8 +876,6 @@ async function processExposureEvent(event) {
 
     let exposures = storageData.exposures || {};
     let timeline = storageData.timeline || [];
-
-    const domain = normalizeDomain(event.domain);
     if (!domain || isInternalUrl(domain)) return;
 
     const now = new Date().toISOString();

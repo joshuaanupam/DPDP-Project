@@ -1,1184 +1,768 @@
-CRITICAL RISK ENGINE CORRECTION — CURRENT SYSTEM IS TOO NAIVE
-
-The current implementation of the PrivacyLens / RECLAIM risk engine is NOT working correctly for real-world websites.
-
-I tested it on piracy/unofficial streaming websites such as:
-
-net77.cc
-and other similar unofficial streaming websites.
-
-The extension displayed:
-
-CLEAN / LOW RISK
-
-even though these websites are exactly the type of sites where we want the product to identify elevated privacy exposure.
-
-The reason is clear from the current architecture:
-
-The existing engine primarily scores visible DOM signals such as:
-
-- HTTP
-- Password field
-- Phone field
-- DOB
-- Email
-- Name
-- Marketing checkbox
-- Tracker scripts
-- Privacy policy
-
-Therefore, a website can have:
-
-HTTPS
-No login form
-No phone field
-No DOB field
-
-and still receive a very low score.
-
-THIS IS NOT SUFFICIENT.
-
-We need to redesign the RISK DETECTION LOGIC while preserving the existing UI, website tracking, exposure tracking, realtime synchronization, and popup behavior.
-
 ============================================================
-1. CORE PROBLEM
+🚨 EMERGENCY STABILITY FIX — DO NOT ADD FEATURES
 ============================================================
 
-The current engine answers:
+STOP ALL NEW FEATURE DEVELOPMENT.
 
-"Does this page currently contain certain privacy-related HTML elements?"
+The PrivacyLens / RECLAIM extension has just suffered a critical regression after the latest risk-engine changes.
 
-But our product needs to answer:
+This is now a HACKATHON BLOCKER.
 
-"How much privacy exposure should a user be concerned about when interacting with this website?"
+The extension was previously working, but now:
 
-These are different questions.
+1. The RECLAIM Chrome extension popup is stuck on:
 
-Therefore create a MULTI-LAYER PRIVACY RISK ENGINE.
+   "Detecting..."
+   "Checking domain exposure..."
+
+2. It shows:
+
+   Websites: 0
+   Exposures: 0
+   High Risk: 0
+
+3. The normal website information is not loading.
+
+4. The in-page RECLAIM popup/overlay behavior is also not working correctly.
+
+5. The dashboard/extension synchronization may also be affected.
+
+DO NOT implement any new risk features right now.
+
+DO NOT redesign anything.
+
+DO NOT modify the UI.
+
+DO NOT add more scoring rules.
+
+DO NOT modify unrelated functionality.
+
+OUR ONLY OBJECTIVE:
+
+RESTORE THE LAST KNOWN WORKING EXTENSION.
 
 ============================================================
-2. NEW RISK ENGINE ARCHITECTURE
+1. CRITICAL RULE
 ============================================================
 
-The final score should be calculated from:
+The latest risk-engine changes are suspected to have caused the regression.
 
-A. CONNECTION SECURITY
-B. DATA COLLECTION
-C. CONSENT / PRIVACY TRANSPARENCY
-D. TRACKING / THIRD-PARTY BEHAVIOR
-E. WEBSITE BEHAVIOR
-F. WEBSITE CATEGORY / DOMAIN INTELLIGENCE
-G. SUSPICIOUS NAVIGATION / AD BEHAVIOR
-H. ACCOUNT / EXPOSURE INFORMATION
+Before changing anything:
+
+IDENTIFY EXACTLY WHAT BROKE.
+
+Do NOT blindly rewrite the extension.
+
+============================================================
+2. FIRST INSPECT GIT HISTORY
+============================================================
+
+Inspect the git history and identify:
+
+- Last commit where RECLAIM extension worked correctly
+- Current commit
+- Files changed between those states
+
+Pay particular attention to:
+
+extension/content.js
+extension/background.js
+extension/popup/popup.js
+extension/popup/popup.html
+manifest.json
+backend/controllers/eventController.js
+backend/controllers/realtimeController.js
+
+Also inspect any newly created:
+
+risk engine files
+domain intelligence files
+storage helpers
+popup trigger files
+
+============================================================
+3. IMMEDIATELY CREATE A RECOVERY POINT
+============================================================
+
+Before changing anything:
+
+Create a new git branch or checkpoint:
+
+emergency-before-fix
+
+DO NOT destroy the current state.
+
+============================================================
+4. FIND THE ACTUAL ERROR
+============================================================
+
+Open Chrome:
+
+chrome://extensions/
+
+Find RECLAIM.
+
+Check:
+
+Service Worker → Inspect
+
+Then check the browser console for the affected website.
+
+Look specifically for:
+
+- JavaScript exceptions
+- undefined functions
+- undefined variables
+- failed imports
+- syntax errors
+- message passing errors
+- runtime.lastError
+- chrome.runtime.sendMessage errors
+- chrome.storage errors
+- fetch errors
+- SSE/EventSource errors
+- JSON parsing errors
+- risk-engine exceptions
+
+Report the EXACT error.
+
+============================================================
+5. TEST THE BACKGROUND WORKER
+============================================================
+
+Verify that background.js successfully starts.
+
+Test:
+
+chrome.runtime.sendMessage
+
+and all existing message handlers.
+
+Verify that messages such as:
+
+GET_CURRENT_STATE
+GET_SITE_STATE
+GET_EXPOSURE
+PAGE_VISIT
+FORM_SUBMISSION
+RISK_UPDATE
+
+or their actual existing equivalents
+
+are still being handled.
+
+IMPORTANT:
+
+Do not invent new message names.
+
+Use the project's existing message architecture.
+
+============================================================
+6. TEST CONTENT SCRIPT
+============================================================
+
+Verify that content.js loads on:
+
+https://example.com
+
+and:
+
+http://localhost
+
+and the existing demo website.
+
+Check whether content.js throws an exception during initialization.
+
+VERY IMPORTANT:
+
+If the newly added risk engine executes during content-script startup and throws an exception, it may prevent the rest of content.js from initializing.
+
+This would explain why:
+
+- Website detection stops
+- Popup communication stops
+- In-page overlay stops
+
+Fix this initialization failure first.
+
+============================================================
+7. TEST EXTENSION POPUP
+============================================================
+
+Open the RECLAIM browser action.
+
+The popup must successfully progress from:
+
+Detecting...
+
+to:
+
+CURRENT SITE
+
+domain.com
+
+and display:
+
+Risk
+Website count
+Exposure count
+
+It must NOT remain stuck on Detecting.
+
+============================================================
+8. CHECK BACKGROUND → POPUP FLOW
+============================================================
+
+Trace:
+
+popup.js
+↓
+background.js
+↓
+state/storage/backend
+↓
+popup.js
+
+Find where the response stops.
+
+For every asynchronous operation verify:
+
+- Promise resolves
+- Promise rejects safely
+- Errors are caught
+- UI receives fallback state
+
+There must NOT be an uncaught promise that leaves the popup permanently in:
+
+Detecting...
+
+============================================================
+9. RISK ENGINE MUST NEVER BREAK THE EXTENSION
+============================================================
+
+The risk engine is an OPTIONAL ANALYSIS MODULE.
+
+It must NEVER be able to crash:
+
+- content.js
+- background.js
+- popup.js
+- website tracking
+- exposure tracking
+
+Wrap risk analysis safely.
 
 Conceptually:
 
-                WEBSITE
-                   |
-        ┌──────────┼──────────┐
-        ↓          ↓          ↓
- Connection     Page       Behavior
-  Signals      Signals      Signals
-        ↓          ↓          ↓
-        └──────────┼──────────┘
-                   ↓
-           Domain Intelligence
-                   ↓
-             Risk Engine
-                   ↓
-           SCORE 0–100
-                   ↓
-       LOW / MEDIUM / HIGH
-                   ↓
-          EXPLAINABLE REASONS
-
-============================================================
-3. IMPORTANT — DO NOT USE AI FOR THE FINAL SCORE
-============================================================
-
-The final risk classification MUST remain deterministic.
-
-AI can later explain the result in natural language.
-
-But:
-
-AI MUST NOT randomly decide:
-
-"this website looks dangerous."
-
-The actual score must come from predefined rules.
-
-This makes the system:
-
-- Explainable
-- Reproducible
-- Debuggable
-- Suitable for a hackathon
-- Easy to demonstrate to judges
-
-============================================================
-4. RISK CATEGORIES
-============================================================
-
-Use these categories:
-
-LOW:
-0–29
-
-MEDIUM:
-30–59
-
-HIGH:
-60–100
-
-But improve the scoring rules substantially.
-
-============================================================
-5. CONNECTION SECURITY RULES
-============================================================
-
-HTTP:
-
-+30
-
-If the site uses:
-
-http://
-
-HTTPS:
-
-No penalty.
-
-IMPORTANT:
-
-HTTPS does NOT mean the website is automatically safe.
-
-It only means the connection is encrypted.
-
-Do not use:
-
-HTTPS = CLEAN
-
-That is a major mistake.
-
-============================================================
-6. PASSWORD OVER HTTP
-============================================================
-
-Password input + HTTP:
-
-+40
-
-This remains a critical signal.
-
-============================================================
-7. PERSONAL DATA COLLECTION
-============================================================
-
-Email:
-+4
-
-Name:
-+4
-
-Phone:
-+8
-
-Address:
-+10
-
-DOB:
-+12
-
-Location:
-+10
-
-Financial information field detected:
-+20
-
-Government ID-related field:
-+20
-
-IMPORTANT:
-
-Only detect the FIELD TYPE.
-
-NEVER capture the actual value.
-
-============================================================
-8. TRACKING / THIRD-PARTY SIGNALS
-============================================================
-
-Improve the tracker detection.
-
-The existing:
-
-"third-party scripts exist"
-
-is too simplistic.
-
-Create a small hardcoded tracker/category database.
-
-Example categories:
-
-ANALYTICS
-ADVERTISING
-TRACKING
-SOCIAL TRACKING
-SESSION RECORDING
-FINGERPRINTING
-
-Create a hardcoded list of recognizable domains/patterns.
-
-Examples may include known analytics/ad/tracking infrastructure.
-
-Do not claim that every third-party script is malicious.
-
-Instead:
-
-1–2 recognizable trackers:
-+5
-
-3–5:
-+10
-
-6+:
-+15
-
-If fingerprinting-like signals are detected:
-
-+15
-
-If session-recording technology is detected:
-
-+10
-
-============================================================
-9. AD / POPUP BEHAVIOR
-============================================================
-
-This is especially important for unofficial streaming/piracy websites.
-
-Detect observable behavior such as:
-
-- Excessive popup windows
-- Pop-under behavior
-- Unexpected new tabs/windows
-- Repeated redirects
-- Automatic navigation to another domain
-- Multiple advertisement overlays
-- Forced external navigation
-- Download prompts
-- Notification permission requests
-
-Scoring:
-
-Unexpected external redirect:
-+10
-
-Repeated redirect behavior:
-+15
-
-Pop-under/new-window behavior:
-+10
-
-Multiple aggressive ad overlays:
-+10
-
-Notification permission request:
-+8
-
-Automatic download initiation:
-+15
-
-These are PRIVACY EXPOSURE / BROWSER BEHAVIOR signals.
-
-Do NOT call the website malware simply because these signals exist.
-
-============================================================
-10. WEBSITE CATEGORY INTELLIGENCE
-============================================================
-
-THIS IS THE MAJOR MISSING PIECE.
-
-Create a hardcoded website-category intelligence layer.
-
-For the hackathon MVP, maintain a configurable category database.
-
-Example:
-
-DOMAIN_INTELLIGENCE = {
-
-    "known_unofficial_streaming": {
-        riskPoints: 25,
-        level: "elevated",
-        reason:
-        "This domain belongs to an unofficial streaming/content distribution category that commonly presents increased advertising and tracking exposure."
-    },
-
-    "known_download_portal": {
-        riskPoints: 20,
-        reason:
-        "This website belongs to a download-oriented category with potentially elevated browser and tracking exposure."
-    },
-
-    "known_ad_heavy_domain": {
-        riskPoints: 15,
-        reason:
-        "This domain is classified as an advertising-heavy web property."
+try {
+    risk = calculateRisk(...)
+} catch (error) {
+    console.error("[RECLAIM RISK]", error)
+
+    risk = {
+        score: 0,
+        level: "LOW",
+        reasons: [],
+        signals: {}
     }
-
 }
 
-IMPORTANT:
+Risk failure must degrade gracefully.
 
-Do NOT make the category database enormous.
-
-For the hackathon, create a small curated dataset.
-
-It should be easy to expand later.
+It must NOT stop the rest of the extension.
 
 ============================================================
-11. DEMO / KNOWN DOMAIN INTELLIGENCE
+10. TEMPORARILY DISABLE THE NEW RISK ENGINE IF NECESSARY
 ============================================================
 
-Create a configuration file such as:
+If the new risk engine is confirmed as the cause:
 
-risk/domainIntelligence.js
+TEMPORARILY DISABLE IT.
 
-or whatever fits the existing architecture.
-
-Example structure:
-
-{
-    domain: "example.com",
-
-    category: "unofficial_streaming",
-
-    categoryScore: 25,
-
-    reason:
-    "Unofficial streaming category with elevated advertising and tracking exposure."
-}
-
-For the hackathon demo, add our known test/demo domains.
+Restore the previous working risk behavior.
 
 For example:
 
-net77.cc
+website tracking
+    ↓
+normal state update
+    ↓
+extension popup
 
-If we intentionally classify it for the demo as:
+must work even if:
 
-category:
-unofficial_streaming
+risk calculation
 
-then:
+is disabled.
 
-category score:
-+25
-
-This should be visible in the explanation.
-
-IMPORTANT:
-
-Do NOT hardcode "net77.cc = malicious".
-
-Instead:
-
-"net77.cc is classified in the configured unofficial streaming category."
-
-The product is measuring PRIVACY EXPOSURE, not declaring criminality or malware.
+THIS IS MORE IMPORTANT THAN THE NEW RISK FEATURES.
 
 ============================================================
-12. CATEGORY SCORE MUST NOT AUTOMATICALLY MEAN HIGH
+11. DO NOT LOSE WEBSITE TRACKING
 ============================================================
 
-This is important.
+After the fix:
 
-A category score alone should usually not automatically produce:
+Visit:
 
-HIGH.
+site-A.com
 
-Instead combine it with observable signals.
+Expected:
 
-Example:
+Websites = +1
 
-Unofficial streaming category:
-+25
+Visit:
 
-Third-party trackers:
-+15
+site-B.com
 
-Aggressive redirects:
-+15
+Expected:
 
-Notification request:
-+8
+Websites = +1
 
-Total:
-63
+Reload:
 
-Result:
+site-A.com
 
-HIGH PRIVACY EXPOSURE
+Expected:
 
-This is much more defensible.
+No additional website count.
 
 ============================================================
-13. PIRACY / UNOFFICIAL STREAMING WEBSITE EXAMPLE
+12. DO NOT LOSE EXPOSURE TRACKING
 ============================================================
 
-Example:
+Existing working behavior must remain.
 
-net77.cc
+If an account relationship is detected:
 
-Observed:
+Exposure +1
 
-HTTPS
-Unofficial streaming category
-Multiple ad/tracking scripts
-External redirect
-Popup behavior
-Notification request
+Repeated login:
 
-Possible score:
+Exposure unchanged.
 
-Category:
-+25
-
-Trackers:
-+15
-
-Redirect:
-+10
-
-Popup behavior:
-+10
-
-Notification:
-+8
-
-Total:
-68
-
-Result:
-
-HIGH
-
-Show:
-
-HIGH PRIVACY EXPOSURE
-
-Why?
-
-• Unofficial streaming category
-• Multiple third-party tracking signals
-• External redirect behavior
-• Aggressive popup behavior
-• Notification permission requested
-
-This is exactly the type of explanation we want.
+Do not modify this logic unless the regression is directly caused by it.
 
 ============================================================
-14. DO NOT CALL IT "MALICIOUS"
+13. RESTORE IN-PAGE RECLAIM OVERLAY
 ============================================================
 
-Unless we have a verified security threat source, DO NOT display:
+The RECLAIM in-page Shadow DOM overlay must load correctly again.
 
-"MALICIOUS WEBSITE"
+Test:
 
-"VIRUS DETECTED"
+New website
 
-"SCAM WEBSITE"
+→ RECLAIM overlay appears according to existing rules.
 
-"THIS WEBSITE WILL STEAL YOUR DATA"
+The overlay must not be blocked because the risk engine fails.
 
-Those are unsupported claims.
+============================================================
+14. CHECK MANIFEST
+============================================================
 
-Instead display:
+Verify manifest.json.
 
-HIGH PRIVACY EXPOSURE
+Do NOT accidentally remove:
+
+content_scripts
+
+permissions
+
+host_permissions
+
+background service_worker
+
+action
+
+storage
+
+scripting
+
+or any other permission currently required.
+
+Compare the current manifest against the last known working version.
+
+============================================================
+15. CHECK FILE IMPORTS
+============================================================
+
+If the latest risk engine introduced something like:
+
+import riskEngine from ...
+
+verify that Chrome Manifest V3 actually supports the current import arrangement.
+
+A missing module/import can kill the content script immediately.
+
+Look for:
+
+Failed to load module script
+Cannot use import statement
+Module not found
+undefined function
+
+etc.
+
+============================================================
+16. CHECK DOMAIN INTELLIGENCE
+============================================================
+
+If the new domain intelligence module is loaded for EVERY page:
+
+verify that it does not crash when:
+
+domain is undefined
+hostname is empty
+URL is chrome://
+URL is extension://
+localhost is used
+IP address is used
+unusual domain is used
+
+Every parser must safely handle unexpected input.
+
+============================================================
+17. CHECK STORAGE
+============================================================
+
+Verify:
+
+chrome.storage.local
+
+existing keys.
+
+DO NOT overwrite the complete storage object accidentally.
+
+Especially verify that:
+
+shownPopups
+
+website state
+
+exposure state
+
+risk state
+
+user state
+
+are not being replaced by a new object.
+
+A dangerous pattern would be:
+
+chrome.storage.local.set({
+    state: newState
+})
+
+when other existing state is expected.
+
+Preserve existing storage structure.
+
+============================================================
+18. CHECK SSE
+============================================================
+
+The project uses SSE.
+
+Verify:
+
+background.js
+↓
+EventSource
+↓
+backend
+↓
+SSE event
+↓
+background state
+↓
+popup
+
+If SSE fails, the extension should STILL load the current local state.
+
+SSE failure must not leave:
+
+Detecting...
+
+forever.
+
+Use a fallback.
+
+============================================================
+19. CHECK API FAILURE HANDLING
+============================================================
+
+If:
+
+/api/events
 
 or:
 
-ELEVATED PRIVACY RISK
+/api/realtime
 
-And explain the observable signals.
+fails,
 
-============================================================
-15. PRIVACY POLICY INTELLIGENCE
-============================================================
+the extension must not completely stop.
 
-Improve the current privacy policy rule.
+Display the last known local state where possible.
 
-Current:
-
-"No privacy policy link = +15"
-
-This can create false positives.
-
-Change it to:
-
-If personal data is being collected AND no obvious privacy policy is detected:
-
-+10
-
-If privacy policy exists:
-
-0
-
-If privacy policy is detected but contains observable broad data-sharing language:
-
-+10
-
-Do NOT claim:
-
-"This website has no privacy policy."
-
-Say:
-
-"No obvious privacy policy link was detected."
+Do not make the popup permanently dependent on a successful network request.
 
 ============================================================
-16. CONSENT QUALITY
+20. IMPORTANT — CURRENT SCREENSHOT ANALYSIS
 ============================================================
 
-Detect:
+The current screenshot shows:
 
-Pre-checked marketing consent:
-+8
+RECLAIM
 
-Bundled consent:
-+10
+Score: 100/100
 
-"Agree to everything" style consent:
-+10
+CURRENT SITE
 
-Marketing consent clearly optional:
-0
+Detecting...
 
-Necessary service consent:
-0
+Checking domain exposure...
 
-Do not treat every consent checkbox as risky.
+Digital Exposure Overview:
 
-============================================================
-17. DATA MINIMIZATION
-============================================================
+0 Websites
+0 Exposures
+0 High Risk
 
-Add a simple excessive-data rule.
+This strongly suggests that the popup UI itself is loading but its DATA INITIALIZATION is failing.
 
-Example:
+Therefore investigate the data retrieval path FIRST.
 
-1–2 personal fields:
-0
-
-3–4:
-+5
-
-5+:
-+10
-
-7+:
-+15
-
-This represents:
-
-"More personal information requested than appears necessary for a basic interaction."
-
-Do NOT claim that the collection is illegal.
+Do not redesign the popup.
 
 ============================================================
-18. DOMAIN REPUTATION / CATEGORY VS PAGE SIGNALS
+21. IMPORTANT — NETMIRROR AD BLOCK POPUP
 ============================================================
 
-The final score should be:
+The large:
 
-BASE SCORE
-+
-PAGE SIGNALS
-+
-TRACKING SIGNALS
-+
-BEHAVIOR SIGNALS
-+
-DOMAIN CATEGORY SIGNALS
+"AdBlock Detected"
 
-Example:
+window visible in the middle of the page is NOT RECLAIM.
 
-BASE:
-0
+It belongs to the website.
 
-HTTPS:
-0
+Do not modify or attempt to remove it.
 
-Email:
-4
-
-Phone:
-8
-
-Trackers:
-15
-
-Redirect:
-10
-
-Unofficial streaming category:
-25
-
-Total:
-62
-
-HIGH
+Our task is ONLY to restore RECLAIM.
 
 ============================================================
-19. RISK REASON PRIORITY
+22. RECOVERY STRATEGY
 ============================================================
 
-Do not show 15 reasons in the popup.
+Use this priority order:
 
-Sort reasons by severity.
+PRIORITY 1
+Extension loads.
 
-Example:
+PRIORITY 2
+Popup loads current website.
 
-HIGH PRIVACY EXPOSURE
-Score: 68/100
+PRIORITY 3
+Website count works.
 
-Top reasons:
+PRIORITY 4
+Exposure count works.
 
-1. Unofficial streaming category
-+25
+PRIORITY 5
+Dashboard synchronization works.
 
-2. Multiple third-party tracking signals
-+15
+PRIORITY 6
+Existing in-page RECLAIM overlay works.
 
-3. External redirect behavior
-+10
+PRIORITY 7
+Basic risk score works.
 
-4. Aggressive popup behavior
-+10
+ONLY AFTER ALL OF THE ABOVE WORK:
 
-[View 2 more signals]
-
-============================================================
-20. WEBSITE PROFILE
-============================================================
-
-Each WebsiteRecord should store:
-
-domain
-
-displayName
-
-category
-
-riskScore
-
-riskLevel
-
-riskReasons
-
-riskSignals
-
-riskUpdatedAt
-
-Example:
-
-{
-    domain: "net77.cc",
-
-    category: "unofficial_streaming",
-
-    riskScore: 68,
-
-    riskLevel: "High",
-
-    riskReasons: [
-        "Unofficial streaming category",
-        "Multiple third-party tracking signals",
-        "External redirect behavior",
-        "Aggressive popup behavior"
-    ],
-
-    riskSignals: {
-        https: true,
-        trackerCount: 6,
-        redirects: 2,
-        popupBehavior: true,
-        notificationRequest: true
-    }
-}
+Re-enable the new advanced risk engine.
 
 ============================================================
-21. DO NOT TRUST CLIENT-SIDE RISK DATA BLINDLY
+23. DO NOT CONTINUE FEATURE DEVELOPMENT
 ============================================================
 
-Currently content.js calculates risk.
+Until the following are all TRUE:
 
-That is acceptable for the hackathon.
+[✓] Extension opens
+[✓] Current domain detected
+[✓] Website count works
+[✓] Exposure count works
+[✓] Popup renders
+[✓] In-page overlay renders
+[✓] Dashboard works
+[✓] Realtime updates work
 
-But ensure:
+DO NOT add:
 
-- Server validates the structure
-- Score cannot be arbitrary
-- Invalid risk levels are rejected
-- Unknown fields are ignored
-
-Do not allow a webpage to simply send:
-
-riskScore = 100
-
-and become HIGH without our engine actually producing the signals.
-
-Where practical, centralize or validate risk computation.
-
-============================================================
-22. REAL-TIME UPDATE
-============================================================
-
-If a website starts as:
-
-LOW 18
-
-and later behavior causes:
-
-HIGH 67
-
-update:
-
-Extension
-+
-Database
-+
-Dashboard
-
-in real time.
-
-The same risk result must appear everywhere.
+- more risk rules
+- more domain categories
+- AI detection
+- threat intelligence
+- new UI
+- new popup features
 
 ============================================================
-23. SMART POPUP RULES REMAIN UNCHANGED
+24. TEST MATRIX
 ============================================================
 
-Keep the previously implemented behavior:
+TEST 1
 
-LOW/MEDIUM:
+Open:
 
-First unique website encounter:
-SHOW popup for 30 seconds.
-
-Revisit:
-DO NOT SHOW.
-
-HIGH:
-
-Every meaningful revisit:
-SHOW popup for 30 seconds.
-
-This behavior must now use the NEW improved risk level.
-
-============================================================
-24. IMPORTANT BUG TO FIX
-============================================================
-
-Currently:
-
-net77.cc
-
-is showing:
-
-CLEAN
-
-even though it is a known unofficial streaming website and exhibits behaviors that should produce elevated privacy exposure.
-
-After this implementation, the system must evaluate:
-
-1. Domain category
-2. Tracker signals
-3. Ad behavior
-4. Redirect behavior
-5. Notification requests
-6. Data collection
-7. Privacy transparency
-8. Connection security
-
-and produce a deterministic result.
-
-============================================================
-25. TEST WEBSITES
-============================================================
-
-Create a controlled test matrix.
-
-TEST A — SIMPLE LOW RISK
-
-HTTPS
-Name
-Email
+https://google.com
 
 Expected:
 
-LOW
+RECLAIM loads.
+
+Current site:
+
+google.com
+
+No "Detecting..." indefinitely.
 
 ------------------------------------------------
 
-TEST B — MEDIUM PRIVACY EXPOSURE
+TEST 2
 
-HTTPS
-Name
-Email
-Phone
-Marketing
-Several trackers
+Open another website.
 
 Expected:
 
-MEDIUM
+Website count updates.
 
 ------------------------------------------------
 
-TEST C — HIGH SECURITY SIGNAL
+TEST 3
 
-HTTP
-Password
-Phone
-DOB
-No privacy policy
+Open same website again.
 
 Expected:
 
-HIGH
+Website count does not increase.
 
 ------------------------------------------------
 
-TEST D — UNOFFICIAL STREAMING
+TEST 4
 
-Known configured category
-Multiple trackers
-Ad behavior
-Redirect
+Open RECLAIM popup manually.
 
 Expected:
 
-HIGH or at minimum MEDIUM depending on observed signals.
+Current website information loads immediately.
 
 ------------------------------------------------
 
-TEST E — NORMAL MAJOR WEBSITE
+TEST 5
 
-HTTPS
-Privacy policy
-Limited data collection
-Few trackers
+Disconnect backend temporarily.
 
 Expected:
 
-LOW or MEDIUM.
+Extension does not crash.
 
-IMPORTANT:
+It should use cached/local state where available.
 
-Do NOT automatically classify all large websites as LOW.
+------------------------------------------------
 
-Risk is based on the actual rules.
+TEST 6
 
-============================================================
-26. FALSE POSITIVE PROTECTION
-============================================================
+Reload extension from:
 
-Do not make the system:
+chrome://extensions/
 
-"Unknown website = HIGH"
+Expected:
 
-That would make the product useless.
+Extension works again.
 
-Unknown websites should start from:
+------------------------------------------------
 
-LOW
+TEST 7
 
-and gain risk points only from detected signals.
+Reload affected website.
 
-Similarly:
+Expected:
 
-HTTPS does not mean LOW.
-
-Unknown does not mean HIGH.
-
-Category alone should usually not be enough for HIGH.
+RECLAIM in-page behavior works.
 
 ============================================================
-27. DOMAIN CATEGORY DATABASE
+25. ACCEPTANCE CRITERIA
 ============================================================
 
-Create categories such as:
+The emergency fix is complete ONLY when:
 
-official_service
+[ ] RECLAIM popup no longer gets stuck at Detecting.
 
-shopping
+[ ] Current domain loads.
 
-social_media
+[ ] Website count works.
 
-finance
+[ ] Exposure count works.
 
-education
+[ ] Dashboard still works.
 
-news
+[ ] SSE still works.
 
-streaming
+[ ] Content script loads.
 
-unofficial_streaming
+[ ] In-page overlay works.
 
-download_portal
+[ ] Existing popup behavior works.
 
-ad_heavy
+[ ] Risk engine cannot crash the extension.
 
-unknown
+[ ] Risk-engine failure gracefully falls back.
 
-These categories should NOT automatically determine the entire score.
+[ ] No existing functionality is removed.
 
-They provide contextual signals.
+[ ] No UI redesign occurs.
 
-============================================================
-28. FUTURE EXTENSIBILITY
-============================================================
-
-Structure the rule engine so that later we can replace the hardcoded domain database with:
-
-- Threat intelligence API
-- URL reputation service
-- Safe Browsing API
-- Privacy policy intelligence
-- ML classifier
-
-But for the hackathon:
-
-USE ONLY OUR DETERMINISTIC LOCAL RULES.
+[ ] No new features are added.
 
 ============================================================
-29. DEBUG MODE
+26. FINAL REPORT REQUIRED
 ============================================================
 
-Add a developer-only risk breakdown.
+After fixing:
 
-Example:
+Tell me:
 
-DOMAIN:
-net77.cc
+1. EXACT ROOT CAUSE
 
-CATEGORY:
-unofficial_streaming
+2. EXACT FILE THAT CAUSED IT
 
-CATEGORY SCORE:
-+25
+3. EXACT FUNCTION THAT CAUSED IT
 
-HTTP:
-NO
+4. EXACT ERROR MESSAGE
 
-PASSWORD:
-NO
+5. WHAT WAS CHANGED
 
-EMAIL:
-NO
+6. WHETHER ANYTHING WAS ROLLED BACK
 
-PHONE:
-NO
+7. HOW YOU VERIFIED THE FIX
 
-TRACKERS:
-6
-+15
+8. WHETHER THE NEW RISK ENGINE IS ENABLED OR TEMPORARILY DISABLED
 
-REDIRECTS:
-2
-+10
+9. MANUAL TEST STEPS
 
-POPUP BEHAVIOR:
-YES
-+10
+10. GIT COMMIT / CHECKPOINT CREATED
 
-NOTIFICATION:
-YES
-+8
-
-TOTAL:
-68
-
-LEVEL:
-HIGH
-
-This will make debugging extremely easy.
+DO NOT say "fixed successfully" without actually testing it.
 
 ============================================================
-30. IMPORTANT — CHECK WHY CURRENT NET77.CC IS CLEAN
+MOST IMPORTANT RULE
 ============================================================
 
-Before changing the code, reproduce:
+STABILITY > RISK ENGINE > NEW FEATURES
 
-net77.cc
+We are in a hackathon.
 
-Then log every risk signal currently detected.
+A working simple extension is infinitely more valuable right now than a sophisticated risk engine that crashes the entire product.
 
-I want to know:
-
-Current score:
-?
-
-Current signals:
-?
-
-Tracker count:
-?
-
-Redirect count:
-?
-
-Popup behavior:
-?
-
-Notification:
-?
-
-Category:
-?
-
-Current reasons:
-?
-
-Explain exactly why the current engine produces CLEAN.
-
-Then implement the improved engine.
-
-============================================================
-31. DO NOT BREAK EXISTING FEATURES
-============================================================
-
-Preserve:
-
-- Unique website count
-- Unique exposure count
-- Dashboard synchronization
-- SSE
-- Extension popup
-- Website activity
-- Existing dashboard
-- Existing Privacy Score
-- Existing login detection
-- Existing ShopEase demo
-- Existing UI
-- 30-second popup
-- HIGH-risk repeated popup behavior
-
-Only improve the risk intelligence layer.
-
-============================================================
-32. FINAL ACCEPTANCE CRITERIA
-============================================================
-
-[ ] Risk is not based only on DOM form fields.
-
-[ ] HTTPS does not automatically mean LOW.
-
-[ ] Unknown website does not automatically mean HIGH.
-
-[ ] Domain category intelligence exists.
-
-[ ] Unofficial streaming category is supported.
-
-[ ] Tracker behavior contributes to score.
-
-[ ] Redirect behavior contributes to score.
-
-[ ] Popup/ad behavior contributes to score.
-
-[ ] Notification permission contributes to score.
-
-[ ] Privacy transparency contributes to score.
-
-[ ] Data collection contributes to score.
-
-[ ] Consent quality contributes to score.
-
-[ ] All scoring remains deterministic.
-
-[ ] Every score has explainable reasons.
-
-[ ] Risk is stored with WebsiteRecord.
-
-[ ] Extension and dashboard show the same risk.
-
-[ ] High-risk websites trigger the repeated popup.
-
-[ ] Low/medium websites trigger popup only once.
-
-[ ] No passwords are captured.
-
-[ ] No payment information is captured.
-
-[ ] No unsupported "malicious" claims are made.
-
-[ ] net77.cc no longer automatically shows CLEAN if its configured category and observed signals meet the risk threshold.
-
-[ ] The risk breakdown can be inspected in developer mode.
-
-============================================================
-33. IMPLEMENTATION ORDER
-============================================================
-
-FIRST:
-
-Inspect the current risk engine.
-
-SECOND:
-
-Reproduce net77.cc.
-
-THIRD:
-
-Explain why it currently gets CLEAN.
-
-FOURTH:
-
-Create the domain intelligence module.
-
-FIFTH:
-
-Create behavior detection signals.
-
-SIXTH:
-
-Improve tracker detection.
-
-SEVENTH:
-
-Update the centralized risk calculation.
-
-EIGHTH:
-
-Store the new risk result.
-
-NINTH:
-
-Update extension popup.
-
-TENTH:
-
-Update dashboard.
-
-ELEVENTH:
-
-Test LOW/MEDIUM/HIGH.
-
-TWELFTH:
-
-Test net77.cc and other configured unofficial streaming demo domains.
-
-THIRTEENTH:
-
-Verify popup rules.
-
-FOURTEENTH:
-
-Verify realtime synchronization.
-
-Do NOT rewrite the entire extension.
-
-Make the smallest architecture-consistent changes necessary.
+RESTORE THE LAST KNOWN WORKING STATE FIRST.
