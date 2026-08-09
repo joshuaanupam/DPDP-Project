@@ -1243,3 +1243,21 @@ body {
 .hidden {
   display: none !important;
 }
+
+.auth-subtitle {
+  font-size: 13px;
+  color: var(--text-dark);
+  margin-top: -12px;
+  margin-bottom: 18px;
+}
+
+.auth-signin-link {
+  color: #007185;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-signin-link:hover {
+  color: #c45500;
+  text-decoration: underline;
+}
