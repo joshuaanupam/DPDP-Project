@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Shield, Clock, ShieldAlert, Sparkles, TrendingUp, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Globe, ShieldAlert, Clock, Sparkles, AlertTriangle, ArrowUpRight, BarChart2 } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
 import { DigitalFootprintGrid } from './DigitalFootprintGrid';
 
@@ -7,33 +7,33 @@ export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
   const { stats } = usePrivacy();
 
   const getScoreColor = (score) => {
-    if (score >= 80) return { text: 'text-emerald-600 dark:text-emerald-400', stroke: '#10B981', label: 'Low Exposure Risk' };
-    if (score >= 50) return { text: 'text-amber-600 dark:text-amber-400', stroke: '#F59E0B', label: 'Moderate Exposure' };
-    return { text: 'text-rose-600 dark:text-rose-400', stroke: '#EF4444', label: 'High Exposure' };
+    if (score >= 80) return { text: 'text-emerald-600 dark:text-emerald-400', iconColor: 'text-emerald-500', label: 'Low Exposure Risk' };
+    if (score >= 50) return { text: 'text-amber-600 dark:text-amber-400', iconColor: 'text-amber-500', label: 'Moderate Exposure' };
+    return { text: 'text-rose-600 dark:text-rose-400', iconColor: 'text-rose-500', label: 'High Exposure' };
   };
 
   const scoreInfo = getScoreColor(stats.privacyScore);
 
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-      
+
       {/* Stat 1: Digital Footprint Overview (clickable accordion) */}
       <div
         className={`bg-beige-50 dark:bg-zinc-900/60 rounded-lg relative overflow-hidden transition-all text-left w-full ${footprintExpanded ? 'col-span-1 sm:col-span-2 lg:col-span-4 ring-2 ring-beige-900/30 dark:ring-beige-300/30' : ''}`}
       >
-        <div 
+        <div
           onClick={() => setFootprintExpanded(prev => !prev)}
           id="overview-stat-footprint"
           className="p-5 cursor-pointer hover:ring-2 hover:ring-beige-900/30 dark:hover:ring-beige-300/30 transition-all group relative z-10"
         >
+          {/* Large background watermark only */}
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
             <Globe className="w-20 h-20 text-beige-900 dark:text-white" />
           </div>
-          <div className="flex items-center justify-between mb-3 relative z-10">
+
+          <div className="mb-3 relative z-10">
             <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Digital Footprint Overview</span>
-            <div className="p-2 rounded-md bg-beige-100 border border-beige-400/30 text-beige-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-beige-300">
-              <Globe className="w-4 h-4" />
-            </div>
           </div>
           <div className="flex items-baseline space-x-1.5 relative z-10">
             <span className="text-3xl font-extrabold text-slate-900 dark:text-white font-heading">{stats.totalWebsites}</span>
@@ -43,7 +43,9 @@ export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
             <span className="text-beige-800 dark:text-zinc-400 flex items-center">
               <Sparkles className="w-3 h-3 mr-1 text-beige-900 dark:text-beige-300" /> Click to View
             </span>
-            <span className="text-beige-900 dark:text-beige-300 font-bold flex items-center gap-1"><ArrowUpRight className="w-3 h-3" /> {footprintExpanded ? 'Close' : 'Open'}</span>
+            <span className="text-beige-900 dark:text-beige-300 font-bold flex items-center gap-1">
+              <ArrowUpRight className="w-3 h-3" /> {footprintExpanded ? 'Close' : 'Open'}
+            </span>
           </div>
         </div>
 
@@ -55,44 +57,42 @@ export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
       </div>
 
       {/* Stat 2: Active Consents */}
-      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group">
-        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group flex flex-col">
+        {/* Large background watermark only */}
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
           <ShieldAlert className="w-20 h-20 text-amber-500" />
         </div>
-        <div className="flex items-center justify-between mb-3">
+
+        <div className="mb-3 relative z-10">
           <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Active Consents</span>
-          <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
-            <ShieldAlert className="w-4 h-4" />
-          </div>
         </div>
-        <div className="flex items-baseline space-x-1.5">
+        <div className="flex items-baseline space-x-1.5 relative z-10 flex-1">
           <span className="text-3xl font-extrabold text-slate-900 dark:text-white font-heading">{stats.activeConsents}</span>
           <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">permissions</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 flex items-center justify-between text-[10px]">
+        <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 flex items-center justify-between text-[10px] relative z-10">
           <span className="text-beige-800 dark:text-zinc-400 flex items-center">
-            <AlertTriangle className="w-3 h-3 mr-1 text-amber-500" /> Marketing & Ads
+            <AlertTriangle className="w-3 h-3 mr-1 text-amber-500" /> Marketing &amp; Ads
           </span>
           <span className="text-amber-600 dark:text-amber-400 font-bold">Revokable</span>
         </div>
       </div>
 
       {/* Stat 3: Pending Privacy Requests */}
-      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group">
-        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group flex flex-col">
+        {/* Large background watermark only */}
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
           <Clock className="w-20 h-20 text-cyan-500" />
         </div>
-        <div className="flex items-center justify-between mb-3">
+
+        <div className="mb-3 relative z-10">
           <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Pending Requests</span>
-          <div className="p-2 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400">
-            <Clock className="w-4 h-4" />
-          </div>
         </div>
-        <div className="flex items-baseline space-x-1.5">
+        <div className="flex items-baseline space-x-1.5 relative z-10 flex-1">
           <span className="text-3xl font-extrabold text-slate-900 dark:text-white font-heading">{stats.pendingRequests}</span>
           <span className="text-[10px] font-medium text-cyan-600 dark:text-cyan-400">in-flight</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 flex items-center justify-between text-[10px]">
+        <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 flex items-center justify-between text-[10px] relative z-10">
           <span className="text-beige-800 dark:text-zinc-400">Audit Proof Log</span>
           <span className="text-cyan-600 dark:text-cyan-400 font-bold flex items-center">
             Tracker Ready <ArrowUpRight className="w-3 h-3 ml-0.5" />
@@ -100,42 +100,25 @@ export const OverviewStats = ({ footprintExpanded, setFootprintExpanded }) => {
         </div>
       </div>
 
-      {/* Stat 4: Digital Privacy Score Card */}
-      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Privacy Score</span>
-          <div className="p-2 rounded-md bg-beige-100 border border-beige-400/30 text-beige-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-beige-300">
-            <Shield className="w-4 h-4" />
-          </div>
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-baseline space-x-1">
-              <span className={`text-3xl font-black font-heading ${scoreInfo.text}`}>{stats.privacyScore}</span>
-              <span className="text-xs font-bold text-slate-500">/ 100</span>
-            </div>
-            <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 mt-0.5">{scoreInfo.label}</p>
-          </div>
-          
-          <div className="relative flex items-center justify-center">
-            <svg className="w-12 h-12 transform -rotate-90">
-              <circle cx="24" cy="24" r="18" stroke="currentColor" strokeWidth="3" fill="transparent" className="text-slate-200 dark:text-zinc-800" />
-              <circle
-                cx="24"
-                cy="24"
-                r="18"
-                stroke={scoreInfo.stroke}
-                strokeWidth="3"
-                fill="transparent"
-                strokeDasharray={113}
-                strokeDashoffset={113 - (113 * stats.privacyScore) / 100}
-                className="transition-all duration-1000 ease-out"
-              />
-            </svg>
-            <TrendingUp className={`w-3.5 h-3.5 absolute ${scoreInfo.text}`} />
-          </div>
+      {/* Stat 4: Privacy Score with bar chart watermark */}
+      <div className="bg-beige-50 dark:bg-zinc-900/60 p-5 rounded-lg relative overflow-hidden group flex flex-col">
+        {/* Large background watermark — same style as other cards */}
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+          <BarChart2 className={`w-20 h-20 ${scoreInfo.iconColor}`} />
         </div>
 
+        <div className="mb-3 relative z-10">
+          <span className="text-[10px] font-bold text-beige-800 dark:text-zinc-400 uppercase tracking-wider">Privacy Score</span>
+        </div>
+
+        <div className="flex items-baseline space-x-1 relative z-10 flex-1">
+          <span className={`text-3xl font-black font-heading ${scoreInfo.text}`}>{stats.privacyScore}</span>
+          <span className="text-xs font-bold text-slate-500">/ 100</span>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-beige-400/20 dark:border-zinc-800/40 text-[10px] relative z-10">
+          <span className={`font-bold ${scoreInfo.text}`}>{scoreInfo.label}</span>
+        </div>
       </div>
 
     </div>

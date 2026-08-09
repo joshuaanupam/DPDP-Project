@@ -3,10 +3,7 @@ import { UserCheck, ShieldAlert, Send, Plus, X, Trash2, Mail, CheckCircle2, User
 import { usePrivacy } from '../context/PrivacyContext';
 
 export const NominationForm = () => {
-  const [nominations, setNominations] = useState([
-    { id: 'nom_1', name: 'Aarav Sharma', email: 'aarav.sharma@example.com', relation: 'Spouse', scope: 'Full Rights', status: 'CONFIRMED', date: '2026-06-12T14:30:00Z', ref: 'PL-NOM-90382' },
-    { id: 'nom_2', name: 'Dr. Priya Nair', email: 'priya.nair@example.com', relation: 'Legal Guardian', scope: 'Revocation/Erasure Only', status: 'PENDING', date: '2026-08-05T09:12:00Z', ref: 'PL-NOM-22340' }
-  ]);
+  const { userData, nominees = [], addNominee, removeNominee } = usePrivacy();
 
   const [form, setForm] = useState({
     name: '',
@@ -28,7 +25,7 @@ export const NominationForm = () => {
     }));
   };
 
-  const handleAddNomination = (e) => {
+  const handleAddNomination = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
@@ -42,33 +39,29 @@ export const NominationForm = () => {
       return;
     }
 
-    const newNominee = {
-      id: `nom_${Date.now()}`,
-      name: form.name,
-      email: form.email,
-      relation: form.relation,
-      scope: form.scope,
-      status: 'INVITE_SENT',
-      date: new Date().toISOString(),
-      ref: `PL-NOM-${Math.floor(10000 + Math.random() * 90000)}`
-    };
-
-    setNominations(prev => [newNominee, ...prev]);
-    setSuccessMsg(`Nomination invitation successfully dispatched to ${form.name}.`);
-    
-    // Reset form
-    setForm({
-      name: '',
-      email: '',
-      phone: '',
-      relation: 'Spouse',
-      scope: 'Full Rights',
-      authorized: false
-    });
+    const res = await addNominee(form.name, form.email, form.relation);
+    if (res && res.success) {
+      setSuccessMsg(`Nomination invitation successfully dispatched to ${form.name}.`);
+      setForm({
+        name: '',
+        email: '',
+        phone: '',
+        relation: 'Spouse',
+        scope: 'Full Rights',
+        authorized: false
+      });
+    } else {
+      setError('Failed to register nominee.');
+    }
   };
 
-  const handleDeleteNomination = (id) => {
-    setNominations(prev => prev.filter(nom => nom.id !== id));
+  const handleDeleteNomination = async (id) => {
+    const res = await removeNominee(id);
+    if (res && res.success) {
+      setSuccessMsg('Nominee successfully removed.');
+    } else {
+      setError('Failed to remove nominee.');
+    }
   };
 
   return (
@@ -205,52 +198,53 @@ export const NominationForm = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/20 dark:divide-slate-800/60">
-              {nominations.length === 0 ? (
+              {nominees.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-500 font-medium">
                     No guardian nominations active.
                   </td>
                 </tr>
               ) : (
-                nominations.map((nom) => (
-                  <tr key={nom.id} className="hover:glass-panel/20 transition-colors">
-                    <td className="py-4 px-4">
-                      <div className="font-bold text-slate-900 dark:text-white">{nom.name}</div>
-                      <div className="text-[11px] text-slate-500 font-mono">{nom.email}</div>
-                    </td>
-                    <td className="py-4 px-4 text-slate-700 dark:text-slate-300">
-                      <span className="font-semibold block">{nom.relation}</span>
-                      <span className="text-[11px] text-indigo-400">{nom.scope}</span>
-                    </td>
-                    <td className="py-4 px-4 font-mono text-slate-700 dark:text-slate-400 font-bold">
-                      <div>{nom.ref}</div>
-                      <div className="text-[10px] text-slate-500 font-sans font-normal">{new Date(nom.date).toLocaleDateString()}</div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className={`inline-flex items-center space-x-1 text-[10px] font-extrabold px-2.5 py-1 rounded-lg border ${
-                        nom.status === 'CONFIRMED'
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                          : nom.status === 'PENDING'
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                          : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
-                      }`}>
-                        {nom.status === 'CONFIRMED' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                        {nom.status === 'PENDING' && <ShieldAlert className="w-3 h-3 mr-1" />}
-                        {nom.status === 'INVITE_SENT' && <Mail className="w-3 h-3 mr-1" />}
-                        {nom.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <button
-                        onClick={() => handleDeleteNomination(nom.id)}
-                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 transition-all hover:scale-105"
-                        title="Delete Nomination"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                nominees.map((nom) => {
+                  const status = nom.confirmed ? 'CONFIRMED' : 'PENDING';
+                  const ref = `PL-NOM-${nom.id.substring(0, 5).toUpperCase()}`;
+                  return (
+                    <tr key={nom.id} className="hover:glass-panel/20 transition-colors">
+                      <td className="py-4 px-4">
+                        <div className="font-bold text-slate-900 dark:text-white">{nom.name}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">{nom.email}</div>
+                      </td>
+                      <td className="py-4 px-4 text-slate-700 dark:text-slate-300">
+                        <span className="font-semibold block">{nom.relationship}</span>
+                        <span className="text-[11px] text-indigo-400">Full Rights</span>
+                      </td>
+                      <td className="py-4 px-4 font-mono text-slate-700 dark:text-slate-400 font-bold">
+                        <div>{ref}</div>
+                        <div className="text-[10px] text-slate-500 font-sans font-normal">{new Date(nom.createdAt).toLocaleDateString()}</div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-flex items-center space-x-1 text-[10px] font-extrabold px-2.5 py-1 rounded-lg border ${
+                          status === 'CONFIRMED'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                        }`}>
+                          {status === 'CONFIRMED' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                          {status === 'PENDING' && <ShieldAlert className="w-3 h-3 mr-1" />}
+                          {status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <button
+                          onClick={() => handleDeleteNomination(nom.id)}
+                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 transition-all hover:scale-105"
+                          title="Delete Nomination"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -186,3 +186,14 @@ async function testDirectRevoke() {
     showToast('❌ Partner API error: ' + error.message);
   }
 }
+
+// Authentication Modal Controls
+function openAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.classList.add('hidden');
+}

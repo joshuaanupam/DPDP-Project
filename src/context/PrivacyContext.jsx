@@ -13,6 +13,8 @@ export const PrivacyProvider = ({ children }) => {
   const [websites, setWebsites] = useState([]);
   const [requests, setRequests] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [nominees, setNominees] = useState([]);
+  const [breaches, setBreaches] = useState([]);
   const [backendActive, setBackendActive] = useState(false);
 
   // Feature toggles — persisted in localStorage
@@ -49,14 +51,20 @@ export const PrivacyProvider = ({ children }) => {
         const data = await res.json();
         setUserData(data.user);
         setWebsites(data.websites);
+        setNominees(data.nominees || []);
+        setBreaches(data.breaches || []);
         setBackendActive(true);
       } else {
         // Fallback to mock data if 404/500
         setWebsites(initialData.websites);
+        setNominees([]);
+        setBreaches([]);
       }
     } catch (err) {
       console.warn("Backend API offline. Using mock dashboard data.");
       setWebsites(initialData.websites);
+      setNominees([]);
+      setBreaches([]);
     }
   };
 
@@ -563,7 +571,7 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'usr_12345',
+          userId: userData.id || 'usr_12345',
           websiteId,
           requestType: 'CONSENT_REVOCATION',
           targetConsent: consentType,
@@ -574,9 +582,9 @@ export const PrivacyProvider = ({ children }) => {
 
       if (response.ok) {
         // Re-sync with backend database
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchRequests(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
       }
     } catch (err) {
       console.warn("Backend offline. Simulating request tracking locally.");
@@ -628,7 +636,7 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'usr_12345',
+          userId: userData.id || 'usr_12345',
           websiteId,
           requestType: 'ACCOUNT_DELETION',
           targetConsent: 'Account & Data Removal',
@@ -638,9 +646,9 @@ export const PrivacyProvider = ({ children }) => {
       });
 
       if (response.ok) {
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchRequests(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
       }
     } catch (err) {
       console.warn("Backend offline. Logging guided initiation locally.");
@@ -693,7 +701,7 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'usr_12345',
+          userId: userData.id || 'usr_12345',
           websiteId,
           requestType,
           tier: 3,
@@ -703,9 +711,9 @@ export const PrivacyProvider = ({ children }) => {
       });
 
       if (response.ok) {
-        await fetchDashboardData();
-        await fetchRequests();
-        await fetchAuditLogs();
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchRequests(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
       }
     } catch (err) {
       console.warn("Backend offline. Logging notice notice locally.");
@@ -764,6 +772,8 @@ export const PrivacyProvider = ({ children }) => {
     setWebsites([]);
     setRequests([]);
     setAuditLogs([]);
+    setNominees([]);
+    setBreaches([]);
     setUserData({
       id: 'usr_12345',
       name: 'Joshua',
@@ -771,6 +781,88 @@ export const PrivacyProvider = ({ children }) => {
       privacyScore: 100
     });
     return false;
+  };
+
+  const addNominee = async (name, email, relationship) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/nominees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userData.id || 'usr_12345', name, email, relationship })
+      });
+      if (res.ok) {
+        await fetchDashboardData(userData.id || 'usr_12345');
+        return { success: true };
+      }
+    } catch (err) {
+      console.warn("Backend offline. Simulating local nominee addition.");
+      setNominees(prev => [...prev, { id: `nom_${Date.now()}`, name, email, relationship, confirmed: true }]);
+      return { success: true };
+    }
+  };
+
+  const removeNominee = async (nomineeId) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/nominees/${nomineeId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        await fetchDashboardData(userData.id || 'usr_12345');
+        return { success: true };
+      }
+    } catch (err) {
+      console.warn("Backend offline. Simulating local nominee removal.");
+      setNominees(prev => prev.filter(n => n.id !== nomineeId));
+      return { success: true };
+    }
+  };
+
+  const updateChildConsent = async (isChild, parentEmail) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/child-consent/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userData.id || 'usr_12345', isChild, parentEmail })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserData(data.user);
+        await fetchDashboardData(userData.id || 'usr_12345');
+        return { success: true };
+      }
+    } catch (err) {
+      console.warn("Backend offline. Simulating local child consent update.");
+      setUserData(prev => ({ ...prev, isChild, parentEmail }));
+      return { success: true };
+    }
+  };
+
+  const reportMockBreach = async (websiteId, description, affectedCount, severity) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/breaches/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteId, description, affectedCount, severity })
+      });
+      if (res.ok) {
+        await fetchDashboardData(userData.id || 'usr_12345');
+        await fetchAuditLogs(userData.id || 'usr_12345');
+        return { success: true };
+      }
+    } catch (err) {
+      console.warn("Backend offline. Simulating local breach reporting.");
+      const website = websites.find(w => w.id === websiteId);
+      setBreaches(prev => [...prev, {
+        id: `breach_${Date.now()}`,
+        websiteId,
+        description,
+        affectedCount,
+        severity,
+        reportedToBoard: true,
+        website: website || { name: 'Unknown' }
+      }]);
+      return { success: true };
+    }
   };
 
   return (
@@ -787,6 +879,8 @@ export const PrivacyProvider = ({ children }) => {
         filteredWebsites,
         requests,
         auditLogs,
+        nominees,
+        breaches,
         stats,
         searchQuery,
         setSearchQuery,
@@ -807,7 +901,11 @@ export const PrivacyProvider = ({ children }) => {
         executeTier3Submit,
         resetDashboard,
         featureToggles,
-        toggleFeature
+        toggleFeature,
+        addNominee,
+        removeNominee,
+        updateChildConsent,
+        reportMockBreach
       }}
     >
       {children}

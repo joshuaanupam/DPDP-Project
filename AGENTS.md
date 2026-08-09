@@ -31,3 +31,5 @@ To prevent Git merge conflicts in this fast-paced sprint, NO TEAM MEMBER / AI AG
 - AI Service (Member 1) uses rule-based fallback if Gemini API is unavailable.
 
 <!-- TM1: MaheshKaranam2006 - AI Intelligence, Privacy Score, Website Brief - DPDP Act Compliance -->
+
+<!-- TM1: MaheshKaranam2006 - Unified AI Summary System & Strict Factual Mode Compliance -->

@@ -6,6 +6,7 @@ export const Tier3LetterGenerator = () => {
   const { selectedWebsite, activeModal, closeModal, executeTier3Submit, userData } = usePrivacy();
 
   const [requestType, setRequestType] = useState('DATA_ERASURE'); // DATA_ERASURE (§12), CONSENT_REVOCATION (§6)
+  const [language, setLanguage] = useState('EN'); // 'EN', 'HI', 'TE'
   const [customReason, setCustomReason] = useState('Personal data retention is no longer necessary for the purpose for which it was processed.');
   const [copied, setCopied] = useState(false);
 
@@ -17,8 +18,80 @@ export const Tier3LetterGenerator = () => {
   // Statutory DPDP Notice Text Generator
   const generateLetterText = () => {
     const isErasure = requestType === 'DATA_ERASURE';
-    const section = isErasure ? 'Section 12 (Right to Erasure of Personal Data)' : 'Section 6(4) (Right to Withdraw Consent)';
 
+    if (language === 'HI') {
+      const section = isErasure ? 'धारा १२ (डेटा मिटाने का अधिकार)' : 'धारा ६(४) (सहमति वापस लेने का अधिकार)';
+      return `डिजिटल पर्सनल डेटा प्रोटेक्शन (DPDP) अधिनियम, 2023 के तहत वैधानिक नोटिस
+
+दिनांक: ${today}
+प्रेषित: डेटा संरक्षण अधिकारी / प्राइवेसी टीम (${site.name})
+डोमेन: ${site.domain}
+ईमेल: privacy@${site.domain}
+
+डेटा प्रिंसिपल से:
+नाम: ${userData.name}
+पंजीकृत ईमेल: ${userData.email}
+
+विषय: DPDP अधिनियम 2023 ${section.toUpperCase()} के तहत ${isErasure ? 'डेटा मिटाने' : 'सहमति वापस लेने'} का औपचारिक नोटिस
+
+प्रिय प्राइवेसी टीम,
+मैं आपके प्लेटफॉर्म (${site.domain}) पर पंजीकृत एक डेटा प्रिंसिपल के रूप में लिख रहा हूं। डिजिटल पर्सनल डेटा प्रोटेक्शन (DPDP) अधिनियम, 2023 की ${section} के अनुसार, मैं इसके द्वारा औपचारिक रूप से अपने अधिकारों का प्रयोग करता हूं:
+
+${isErasure ? `1. डेटा मिटाने की मांग: मैं इसके द्वारा ${site.name} को निर्देश देता हूं कि मेरे से संबंधित सभी व्यक्तिगत डेटा को आपके सर्वर, बैकअप सिस्टम और तीसरे पक्ष के डेटा प्रोसेसर से स्थायी रूप से मिटा दिया जाए।
+2. प्रोसेसिंग पर रोक: आपसे अनुरोध है कि इस नोटिस की प्राप्ति के तुरंत बाद मेरे व्यक्तिगत डेटा की सभी प्रोसेसिंग को बंद कर दिया जाए।` : `1. सहमति वापस लेना: मैं इसके द्वारा ${site.name} को दी गई विपणन संचार, ट्रैकिंग और डेटा साझाकरण की सहमति वापस लेता हूं।
+2. संशोधित सहमति स्थिति: कृपया अपने सहमति रिकॉर्ड को अपडेट करें और सभी विपणन अनुमतियों को वापस लिया हुआ दर्ज करें।`}
+
+विशिष्ट निर्देश / कारण:
+"${customReason}"
+
+वैधानिक समय-सीमा:
+DPDP अधिनियम के नियमों के अनुसार, डेटा फिड्यूशरीज़ को वैधानिक समय-सीमा के भीतर अनुरोधों को निष्पादित करना होगा और अनुपालन की लिखित पुष्टि प्रदान करनी होगी।
+
+कृपया इस नोटिस की प्राप्ति की पुष्टि करें।
+
+भवदीय,
+${userData.name}
+(डेटा प्रिंसिपल)
+संदर्भ संख्या: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
+    }
+
+    if (language === 'TE') {
+      const section = isErasure ? 'సెక్షన్ 12 (డేటా తొలగింపు హక్కు)' : 'సెక్షన్ 6(4) (సమ్మతి ఉపసంహరణ హక్కు)';
+      return `డిజిటల్ వ్యక్తిగత డేటా రక్షణ (DPDP) చట్టం, 2023 కింద చట్టబద్ధమైన నోటీసు
+
+తేదీ: ${today}
+స్వీకర్త: డేటా రక్షణ అధికారి / గోప్యతా బృందం (${site.name})
+డొమైన్: ${site.domain}
+ఈమెయిల్: privacy@${site.domain}
+
+డేటా ప్రిన్సిపాల్ నుండి:
+పేరు: ${userData.name}
+నమోదిత ఈమెయిల్: ${userData.email}
+
+విషయం: DPDP చట్టం 2023 ${section.toUpperCase()} కింద ${isErasure ? 'డేటా తొలగింపు' : 'సమ్మతి ఉపసంహరణ'} కొరకు నోటీసు
+
+ప్రియమైన గోప్యతా బృందం,
+నేను మీ ప్లాట్‌ఫారమ్ (${site.domain}) లో నమోదైన డేటా ప్రిన్సిపాల్‌గా వ్రాస్తున్నాను. డిజిటల్ వ్యక్తిగత డేటా రక్షణ (DPDP) చట్టం, 2023 యొక్క ${section} ప్రకారం, నా హక్కులను ఉపయోగించుకుంటున్నాను:
+
+${isErasure ? `1. డేటా తొలగింపు: నా వ్యక్తిగత డేటాను మీ సర్వర్లు మరియు థర్డ్ పార్టీ ప్రాసెసర్ల నుండి శాశ్వతంగా తొలగించాల్సిందిగా ${site.name} ని కోరుతున్నాను.
+2. ప్రాసెసింగ్ నిలిపివేత: ఈ నోటీసు అందిన వెంటనే నా వ్యక్తిగత డేటా ప్రాసెసింగ్ నిలిపివేయవలసిందిగా కోరుతున్నాను.` : `1. సమ్మతి ఉపసంహరణ: మార్కెటింగ్, ప్రకటనల కోసం నేను గతంలో ${site.name} కి ఇచ్చిన అన్ని సమ్మతులను ఉపసంహరించుకుంటున్నాను.
+2. సమ్మతి స్థితి మార్పు: దయచేసి మీ రికార్డులను అప్‌డేట్ చేసి, నా సమ్మతిని ఉపసంహరించినట్లు నమోదు చేయండి.`}
+
+గోప్యతా సూచనలు:
+"${customReason}"
+
+చట్టబద్ధమైన గడువు:
+DPDP చట్టం నిబంధనల ప్రకారం, నిర్ణీత గడువులోగా ఈ అభ్యర్థనను అమలు చేసి, మాకు రాతపూర్వక ధ్రువీకరణ ఇవ్వాల్సి ఉంటుంది.
+
+స్వీకరణను ధ్రువీకరించండి.
+
+భవదీయుడు,
+${userData.name}
+(డేటా ప్రిన్సిపాల్)
+రెఫరెన్స్ సంఖ్య: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
+    }
+
+    const section = isErasure ? 'Section 12 (Right to Erasure of Personal Data)' : 'Section 6(4) (Right to Withdraw Consent)';
     return `STATUTORY NOTICE UNDER THE DIGITAL PERSONAL DATA PROTECTION ACT, 2023
 
 DATE: ${today}
@@ -95,21 +168,34 @@ Verification Ref: PL-DPDP-${Math.floor(100000 + Math.random() * 900000)}`;
         </div>
 
         {/* Options Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div>
-            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Select DPDP Statutory Right</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Select DPDP Right</label>
             <select
               value={requestType}
               onChange={(e) => setRequestType(e.target.value)}
               className="w-full py-2 px-3 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-violet-500"
             >
-              <option value="DATA_ERASURE" className="bg-[#131B2E]">DPDP §12 — Data Erasure & Account Purge</option>
-              <option value="CONSENT_REVOCATION" className="bg-[#131B2E]">DPDP §6(4) — Statutory Consent Withdrawal</option>
+              <option value="DATA_ERASURE" className="bg-[#131B2E]">DPDP §12 — Data Erasure</option>
+              <option value="CONSENT_REVOCATION" className="bg-[#131B2E]">DPDP §6(4) — Consent Withdrawal</option>
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Specific Instruction / Note</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Notice Language (§5(3))</label>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full py-2 px-3 rounded-xl glass-input text-xs font-medium focus:ring-2 focus:ring-violet-500"
+            >
+              <option value="EN" className="bg-[#131B2E]">English (EN)</option>
+              <option value="HI" className="bg-[#131B2E]">हिन्दी (HI)</option>
+              <option value="TE" className="bg-[#131B2E]">తెలుగు (TE)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Instruction / Note</label>
             <input
               type="text"
               value={customReason}

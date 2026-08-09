@@ -1,7 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, ShieldAlert, Zap, ExternalLink, FileText, Sparkles, Eye, CheckCircle2, AlertTriangle, ArrowRight, Lock, RefreshCw, ShieldCheck } from 'lucide-react';
 import { usePrivacy } from '../context/PrivacyContext';
-import { generateVerifiedFacts } from '../utils/websiteFacts';
+
+/**
+ * Helper to normalize domain strings
+ */
+function normalizeDomain(str) {
+  if (!str) return '';
+  let dom = str.trim().toLowerCase();
+  if (dom.includes('://')) {
+    try { dom = new URL(dom).hostname; } catch (e) { dom = dom.split('://')[1].split('/')[0]; }
+  }
+  dom = dom.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+  if (dom.startsWith('www.')) dom = dom.substring(4);
+  return dom;
+}
 
 export const WebsiteDetailModal = () => {
   const {
@@ -16,11 +29,41 @@ export const WebsiteDetailModal = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiSummary, setShowAiSummary] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('EN'); // 'EN', 'HI', 'TE'
-  const [verifiedFacts, setVerifiedFacts] = useState({ bullets: [], isAvailable: false });
+  const [summaryData, setSummaryData] = useState(null);
 
-  // Guard: must be before any hook that depends on site
-  if (activeModal !== 'DETAIL' || !selectedWebsite) return null;
+  // Active domain request ref to prevent asynchronous race conditions
+  const activeDomainRef = useRef('');
+
   const site = selectedWebsite;
+  const normDomain = site ? normalizeDomain(site.domain) : '';
+
+  // Prevent Stale State: Reset state immediately when selected website changes or modal opens
+  useEffect(() => {
+    if (site && normDomain) {
+      activeDomainRef.current = normDomain;
+      setShowAiSummary(false);
+      setSummaryData(null);
+      setAiLoading(false);
+
+      // Check if cache already exists for this exact domain: privacylens_summary_<domain>
+      const cacheKey = `privacylens_summary_${normDomain}`;
+      try {
+        const cachedRaw = localStorage.getItem(cacheKey);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed && parsed.websiteId === normDomain) {
+            setSummaryData(parsed);
+            setShowAiSummary(true);
+            
+            console.log(`[PrivacyLens Summary] Current Website: ${site.domain} | Website ID: ${normDomain} | AI Request: ${normDomain} | Cache Key: ${cacheKey}`);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [site?.id, site?.domain, activeModal]);
+
+  // Guard: must be after hooks
+  if (activeModal !== 'DETAIL' || !selectedWebsite) return null;
 
   const getRiskBadge = (risk) => {
     switch (risk) {
@@ -30,26 +73,78 @@ export const WebsiteDetailModal = () => {
     }
   };
 
-  // Re-derive facts whenever site or language changes
-  const handleGenerateAiSummary = () => {
+  // Main Unified Summary Fetcher
+  const fetchSummaryForLanguage = async (lang = 'EN') => {
     setAiLoading(true);
-    // Simulate brief AI "analysis" delay then derive facts from site data
-    setTimeout(() => {
-      const result = generateVerifiedFacts(site, selectedLanguage);
-      setVerifiedFacts(result);
-      setAiLoading(false);
-      setShowAiSummary(true);
-    }, 700);
-  };
+    activeDomainRef.current = normDomain;
 
-  // Regenerate in-place when user switches language (if summary already shown)
-  const handleLanguageSwitch = (lang) => {
-    setSelectedLanguage(lang);
-    if (showAiSummary) {
-      const result = generateVerifiedFacts(site, lang);
-      setVerifiedFacts(result);
+    const cacheKey = `privacylens_summary_${normDomain}`;
+    console.log(`[PrivacyLens Summary] Current Website: ${site.domain} | Website ID: ${normDomain} | AI Request: ${normDomain} | Cache Key: ${cacheKey}`);
+
+    try {
+      const res = await fetch('http://localhost:5000/api/ai/website-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: normDomain,
+          websiteName: site.name,
+          language: lang,
+          verifiedData: {
+            dataItems: site.dataItems,
+            consents: site.consents,
+            deletionTier: site.deletionTier
+          }
+        })
+      });
+
+      const data = await res.json();
+
+      // ASYNCHRONOUS RACE CONDITION CHECK:
+      // Discard response if user switched to another website in the meantime!
+      if (activeDomainRef.current !== normDomain) {
+        console.warn(`[PrivacyLens Summary] Discarding stale summary response for ${normDomain} as user switched to ${activeDomainRef.current}`);
+        return;
+      }
+
+      if (data && data.bullets) {
+        setSummaryData(data);
+        setShowAiSummary(true);
+
+        // Store in strict domain-keyed localStorage cache
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.error('Error fetching website summary:', err);
+    } finally {
+      if (activeDomainRef.current === normDomain) {
+        setAiLoading(false);
+      }
     }
   };
+
+  const handleGenerateAiSummary = () => {
+    fetchSummaryForLanguage(selectedLanguage);
+  };
+
+  const handleLanguageSwitch = (lang) => {
+    setSelectedLanguage(lang);
+    fetchSummaryForLanguage(lang);
+  };
+
+  const getBulletsToDisplay = () => {
+    if (!summaryData) return [];
+    if (summaryData.bullets && summaryData.bullets.length > 0) {
+      return summaryData.bullets;
+    }
+    if (summaryData.summary && summaryData.summary[selectedLanguage]) {
+      return summaryData.summary[selectedLanguage].split('\n');
+    }
+    return ['• Verified website information unavailable.'];
+  };
+
+  const currentBullets = getBulletsToDisplay();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md animate-fadeIn">
@@ -138,7 +233,7 @@ export const WebsiteDetailModal = () => {
           </div>
         </div>
 
-        {/* Section 3: AI Policy Summarizer — Strict Factual Mode */}
+        {/* Section 3: AI Policy Summarizer — Unified System (Strict Factual Mode) */}
         <div className="mb-6 p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/30">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
@@ -146,7 +241,7 @@ export const WebsiteDetailModal = () => {
               <span className="text-xs font-bold text-indigo-200">Plain-Language AI Policy Summary</span>
             </div>
 
-            {/* Language switcher — always visible once summary is shown */}
+            {/* Language switcher */}
             {showAiSummary && (
               <div className="flex items-center space-x-1 bg-indigo-900/40 p-0.5 rounded-lg border border-indigo-500/25 text-[10px] font-bold">
                 {['EN', 'HI', 'TE'].map(lang => (
@@ -165,7 +260,7 @@ export const WebsiteDetailModal = () => {
               </div>
             )}
 
-            {/* Summarize button — only shown before summary is generated */}
+            {/* Summarize button */}
             {!showAiSummary && (
               <button
                 onClick={handleGenerateAiSummary}
@@ -185,32 +280,30 @@ export const WebsiteDetailModal = () => {
           </div>
 
           {/* Summary output */}
-          {showAiSummary ? (
+          {aiLoading ? (
+            <p className="text-xs text-indigo-300 italic mt-2 animate-pulse">
+              🔄 Generating verified website summary...
+            </p>
+          ) : showAiSummary ? (
             <div className="mt-3 bg-indigo-900/20 p-3 rounded-xl border border-indigo-500/20">
 
               {/* Strict Factual Mode badge */}
               <div className="flex items-center space-x-1.5 mb-3">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                  Strict Factual Mode — {site.name} ({site.domain}) only
+                  Strict Factual Mode — {site.name} ({normDomain}) only
                 </span>
               </div>
 
               {/* Verified bullet points */}
-              {verifiedFacts.isAvailable ? (
-                <ul className="space-y-2">
-                  {verifiedFacts.bullets.map((bullet, idx) => (
-                    <li key={idx} className="flex items-start space-x-2 text-xs text-indigo-100/90 leading-relaxed">
-                      <span className="text-indigo-400 font-bold mt-0.5 shrink-0">•</span>
-                      <span>{bullet}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs font-bold text-amber-400 tracking-wide">
-                  {verifiedFacts.bullets[0]}
-                </p>
-              )}
+              <ul className="space-y-2">
+                {currentBullets.map((bullet, idx) => (
+                  <li key={idx} className="flex items-start space-x-2 text-xs text-indigo-100/90 leading-relaxed">
+                    <span className="text-indigo-400 font-bold mt-0.5 shrink-0">•</span>
+                    <span>{bullet.replace(/^•\s*/, '')}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : (
             <p className="text-xs text-slate-500 mt-1">

@@ -48,6 +48,16 @@ exports.getDashboardData = async (req, res) => {
     });
     const pendingRequestsCount = requests.filter(r => r.status === 'SUBMITTED' || r.status === 'AWAITING_RESPONSE').length;
 
+    // Fetch nominees for trusted contact system
+    const nominees = await prisma.nominee.findMany({ where: { userId } });
+
+    // Fetch breaches affecting user's visited websites
+    const websiteIds = websites.map(w => w.id);
+    const breaches = await prisma.dataBreach.findMany({
+      where: { websiteId: { in: websiteIds } },
+      include: { website: true }
+    });
+
     // Format digital footprint website grid data based on User's visited websites
     const formattedWebsites = userWebsites.map(userSite => {
       const site = websites.find(w => w.domain === userSite.domain) || {
@@ -59,7 +69,8 @@ exports.getDashboardData = async (req, res) => {
         deletionTier: 2,
         directApiUrl: null,
         guidedUrl: `https://${userSite.domain}/privacy`,
-        faviconUrl: null
+        faviconUrl: null,
+        isSDF: false
       };
 
       const siteDataItems = dataItems.filter(d => d.websiteId === site.id);
@@ -94,6 +105,7 @@ exports.getDashboardData = async (req, res) => {
         directApiUrl: site.directApiUrl,
         guidedUrl: site.guidedUrl,
         faviconUrl: site.faviconUrl,
+        isSDF: site.isSDF || false,
         dataItems: siteDataItems.map(d => d.dataType),
         activeConsents: activeConsentNames,
         consents: siteConsents.map(c => ({
@@ -120,14 +132,18 @@ exports.getDashboardData = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        privacyScore: currentPrivacyScore
+        privacyScore: currentPrivacyScore,
+        isChild: user.isChild,
+        parentEmail: user.parentEmail
       },
       stats: {
         totalWebsites: userWebsites.length,
         activeConsents: activeConsentsCount,
         pendingRequests: pendingRequestsCount
       },
-      websites: formattedWebsites
+      websites: formattedWebsites,
+      nominees,
+      breaches
     });
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
