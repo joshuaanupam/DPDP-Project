@@ -12,8 +12,6 @@ async function runSeed(prismaInstance) {
   await db.dataItem.deleteMany();
   await db.nominee.deleteMany();
   await db.dataBreach.deleteMany();
-  await db.breach.deleteMany();
-  await db.websiteRecord.deleteMany();
   await db.website.deleteMany();
   await db.user.deleteMany();
 

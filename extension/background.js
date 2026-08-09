@@ -285,52 +285,56 @@ function evaluateRisk(dataTypes = [], consentTypes = [], lastSeenDate = null) {
   let score = 0;
   const reasons = [];
 
-  const hasEmail = dataTypes.includes('email');
-  const hasPhone = dataTypes.includes('phone');
-  const hasName = dataTypes.includes('name');
-  const hasMarketing = consentTypes.includes('marketing');
-  const hasPromotional = consentTypes.includes('promotional');
+  if (dataTypes.includes('email')) {
+    score += 4;
+    reasons.push('Email address collection');
+  }
+  if (dataTypes.includes('name')) {
+    score += 4;
+    reasons.push('Personal name collection');
+  }
+  if (dataTypes.includes('phone')) {
+    score += 8;
+    reasons.push('Telephone number collection');
+  }
+  if (dataTypes.includes('address')) {
+    score += 10;
+    reasons.push('Physical address collection');
+  }
+  if (dataTypes.includes('dob')) {
+    score += 12;
+    reasons.push('Age/Date of Birth collection');
+  }
+  if (dataTypes.includes('location')) {
+    score += 10;
+    reasons.push('Location coordinate collection');
+  }
+  if (dataTypes.includes('financial')) {
+    score += 20;
+    reasons.push('Financial account/payment field collection');
+  }
+  if (dataTypes.includes('govId')) {
+    score += 20;
+    reasons.push('Government identification number collection');
+  }
 
-  if (hasEmail) {
-    score += 1;
-    reasons.push('Email address captured');
-  }
-  if (hasPhone) {
-    score += 2;
-    reasons.push('Phone number captured (+2 severity)');
-  }
-  if (hasName) {
-    score += 1;
-    reasons.push('Full name linked');
-  }
-  if (hasMarketing) {
-    score += 2;
-    reasons.push('Marketing communications consent granted');
-  }
-  if (hasPromotional) {
-    score += 2;
-    reasons.push('Promotional newsletter consent active');
-  }
-
-  if (lastSeenDate) {
-    const daysInactive = (Date.now() - new Date(lastSeenDate).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysInactive > 90) {
-      score += 2;
-      reasons.push(`Inactive account (No activity for ${Math.floor(daysInactive)} days)`);
-    } else if (daysInactive > 30) {
-      score += 1;
-      reasons.push(`Inactive account (No activity for ${Math.floor(daysInactive)} days)`);
-    }
+  if (consentTypes.includes('marketing') || consentTypes.includes('promotional')) {
+    score += 8;
+    reasons.push('Pre-checked marketing consent checkbox');
   }
 
   let riskLevel = 'low';
-  if (score >= 6) {
+  if (score >= 60) {
     riskLevel = 'high';
-  } else if (score >= 3) {
+  } else if (score >= 30) {
     riskLevel = 'medium';
   }
 
-  return { riskLevel, riskReasons: reasons, riskScore: score };
+  return {
+    riskScore: Math.min(100, Math.max(0, score)),
+    riskLevel,
+    riskReasons: reasons
+  };
 }
 
 /**
@@ -858,13 +862,20 @@ async function handleClearAllData() {
  */
 async function processExposureEvent(event) {
   try {
+    const domain = normalizeDomain(event.domain);
+    if (domain && event.riskScore !== undefined) {
+      domainRiskMap[domain] = {
+        riskScore: event.riskScore,
+        riskLevel: event.riskLevel,
+        riskReasons: event.riskReasons
+      };
+    }
+
     const storageData = await chrome.storage.local.get(['exposures', 'timeline', 'reclaimEnabled']);
     if (storageData.reclaimEnabled === false) return;
 
     let exposures = storageData.exposures || {};
     let timeline = storageData.timeline || [];
-
-    const domain = normalizeDomain(event.domain);
     if (!domain || isInternalUrl(domain)) return;
 
     const now = new Date().toISOString();
@@ -874,13 +885,12 @@ async function processExposureEvent(event) {
     console.log(`[PrivacyLens Extension] Login detected: true`);
     console.log(`[PrivacyLens Extension] Exposure already exists: ${exists}`);
 
-    const { riskLevel, riskReasons } = evaluateRisk(event.dataTypes || [], event.consents || [], now);
+    const riskLvl = event.riskLevel ? event.riskLevel.toLowerCase() : evaluateRisk(event.dataTypes || [], event.consents || [], now).riskLevel;
+    const riskReas = event.riskReasons || evaluateRisk(event.dataTypes || [], event.consents || [], now).riskReasons;
 
     if (existing) {
       const mergedDataTypes = Array.from(new Set([...(existing.dataTypes || []), ...(event.dataTypes || [])]));
       const mergedConsentTypes = Array.from(new Set([...(existing.consentTypes || []), ...(event.consents || [])]));
-      
-      const updatedRisk = evaluateRisk(mergedDataTypes, mergedConsentTypes, now);
 
       exposures[domain] = {
         ...existing,
@@ -888,8 +898,8 @@ async function processExposureEvent(event) {
         dataTypes: mergedDataTypes,
         consentTypes: mergedConsentTypes,
         eventCount: (existing.eventCount || 1) + 1,
-        riskLevel: updatedRisk.riskLevel,
-        riskReasons: updatedRisk.riskReasons
+        riskLevel: riskLvl,
+        riskReasons: riskReas
       };
     } else {
       exposures[domain] = {
@@ -901,8 +911,8 @@ async function processExposureEvent(event) {
         consentTypes: event.consents || [],
         eventCount: 1,
         accountExposure: 'possible',
-        riskLevel: riskLevel,
-        riskReasons: riskReasons,
+        riskLevel: riskLvl,
+        riskReasons: riskReas,
         cleanupStatus: 'RECOMMENDED'
       };
     }

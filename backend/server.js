@@ -55,6 +55,10 @@ app.get('/api/audit/:userId', auditController.getAuditLogs);
 // Website Details
 app.get('/api/websites/:websiteId', websiteController.getWebsiteDetail);
 
+// Advanced DPDP Nominee Features
+app.post('/api/user/nominate', userController.nominateUser);
+app.post('/api/user/confirm-nomination', userController.confirmNomination);
+
 // Nominees Routing (Multi-Nominee system)
 app.post('/api/nominees', async (req, res, next) => {
   const { PrismaClient } = require('@prisma/client');
@@ -118,10 +122,6 @@ app.post('/api/child-consent/request', async (req, res, next) => {
   }
 });
 
-// Advanced DPDP Nominee Features
-app.post('/api/user/nominate', userController.nominateUser);
-app.post('/api/user/confirm-nomination', userController.confirmNomination);
-
 // Advanced DPDP Breach & Penalty Shield
 app.get('/api/penalty-shield', breachController.getPenaltyShield);
 
@@ -169,9 +169,6 @@ app.post('/api/breaches/report', async (req, res, next) => {
     return res.status(400).json({ success: false, message: 'Either websiteId or orgId is required to report a breach.' });
   }
 });
-
-// AI Policy Summarizer
-app.post('/api/ai/summarize-policy', aiController.summarizePolicy);
 
 // Reset Demo Database
 app.post('/api/demo/reset', async (req, res) => {

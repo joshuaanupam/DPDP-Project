@@ -3,6 +3,39 @@ const prisma = new PrismaClient();
 const { calculateAndSavePrivacyScore } = require('../utils/privacyScore');
 const realtimeController = require('./realtimeController');
 
+const DOMAIN_INTELLIGENCE = {
+  "net77.cc": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "netmirror.gg": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "5movierulz.pictures": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "piratebay.org": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "downloadhub.in": {
+    category: "download_portal",
+    categoryScore: 20,
+    reason: "Download portal with elevated browser and tracking exposure."
+  },
+  "adheavy.com": {
+    category: "ad_heavy",
+    categoryScore: 15,
+    reason: "Advertising-heavy domain with tracking exposure."
+  }
+};
+
 /**
  * POST /api/events
  * Receives extension event payloads, upserts website, data items, and consents.
@@ -137,15 +170,39 @@ exports.handleEvent = async (req, res) => {
       }
     });
 
+    // Validate client-computed risk parameters
+    let riskScore = req.body.riskScore !== undefined ? Number(req.body.riskScore) : 8;
+    let riskLevel = req.body.riskLevel || 'Low';
+    let riskReasons = req.body.riskReasons ? (Array.isArray(req.body.riskReasons) ? req.body.riskReasons : []) : [];
+
+    const baseIntel = DOMAIN_INTELLIGENCE[normalizedDomain];
+    if (baseIntel) {
+      if (riskScore < baseIntel.categoryScore) {
+        riskScore = baseIntel.categoryScore;
+      }
+      if (!riskReasons.includes(baseIntel.reason)) {
+        riskReasons.push(baseIntel.reason);
+      }
+    }
+
+    riskScore = Math.min(100, Math.max(0, riskScore));
+    if (riskScore >= 60) {
+      riskLevel = 'High';
+    } else if (riskScore >= 30) {
+      riskLevel = 'Medium';
+    } else {
+      riskLevel = 'Low';
+    }
+
     if (existingRecord) {
       await prisma.websiteRecord.update({
         where: { id: existingRecord.id },
         data: {
           lastSeenAt: new Date(),
           loginDetected: existingRecord.loginDetected || isLoginEvent,
-          riskScore: req.body.riskScore !== undefined ? Number(req.body.riskScore) : existingRecord.riskScore,
-          riskLevel: req.body.riskLevel || existingRecord.riskLevel,
-          riskReasons: req.body.riskReasons ? JSON.stringify(req.body.riskReasons) : existingRecord.riskReasons
+          riskScore: riskScore,
+          riskLevel: riskLevel,
+          riskReasons: JSON.stringify(riskReasons)
         }
       });
     } else {
@@ -157,9 +214,9 @@ exports.handleEvent = async (req, res) => {
           firstSeenAt: new Date(),
           lastSeenAt: new Date(),
           loginDetected: isLoginEvent,
-          riskScore: req.body.riskScore !== undefined ? Number(req.body.riskScore) : 8,
-          riskLevel: req.body.riskLevel || 'Low',
-          riskReasons: req.body.riskReasons ? JSON.stringify(req.body.riskReasons) : '[]'
+          riskScore: riskScore,
+          riskLevel: riskLevel,
+          riskReasons: JSON.stringify(riskReasons)
         }
       });
     }

@@ -760,53 +760,9 @@ export const PrivacyProvider = ({ children }) => {
         method: 'POST'
       });
       if (response.ok) {
-        // Force session and user state to default demo user Joshua (usr_12345)
-        localStorage.setItem('privacylens_token', 'token_usr_12345');
-        
-        // Notify extension of session reset
-        const defaultUser = {
-          id: 'usr_12345',
-          name: 'Joshua',
-          email: 'joshua@example.com',
-          privacyScore: 72
-        };
-        setUserData(defaultUser);
-        setIsAuthenticated(true);
-        setBackendActive(true);
-
-        window.postMessage({
-          direction: 'from-page',
-          type: 'SetExtensionSession',
-          detail: { token: 'token_usr_12345', user: defaultUser }
-        }, '*');
-
-        // Clear local storage sync cache
-        localStorage.removeItem('reclaim_extension_sync');
-
-        // Reset frontend extension data state to 0 immediately
-        setExtensionData({
-          webCount: 0,
-          exposureCount: 0,
-          visitedWebsites: [],
-          exposures: {},
-          privacyScore: 100,
-          isExtensionSynced: false
-        });
-
-        // Clear websites list immediately to let fetchDashboardData load the clean database ones
-        setWebsites([]);
-        setRequests([]);
-        setAuditLogs([]);
-
-        // Clear extension local data
-        window.postMessage({
-          direction: 'from-page',
-          type: 'ClearExtensionData'
-        }, '*');
-
-        await fetchDashboardData('usr_12345');
-        await fetchRequests('usr_12345');
-        await fetchAuditLogs('usr_12345');
+        await fetchDashboardData();
+        await fetchRequests();
+        await fetchAuditLogs();
         return true;
       }
     } catch (err) {

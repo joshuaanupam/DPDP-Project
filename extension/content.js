@@ -1,3 +1,4 @@
+
 // content.js - RECLAIM Privacy Exposure Interceptor, Website Visit Monitor & Auto-Show Overlay
 // Privacy-by-Design: Extracts ONLY metadata categories. Never harvests values, passwords, or PII.
 
@@ -7,6 +8,208 @@
 
 // Explicitly forbidden input types, names, and autocomplete attributes for security
 const SENSITIVE_TYPES = ['password', 'hidden', 'file'];
+
+const DOMAIN_INTELLIGENCE = {
+  "net77.cc": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "netmirror.gg": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "5movierulz.pictures": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "piratebay.org": {
+    category: "unofficial_streaming",
+    categoryScore: 25,
+    reason: "Unofficial streaming category with elevated advertising and tracking exposure."
+  },
+  "downloadhub.in": {
+    category: "download_portal",
+    categoryScore: 20,
+    reason: "Download portal with elevated browser and tracking exposure."
+  },
+  "adheavy.com": {
+    category: "ad_heavy",
+    categoryScore: 15,
+    reason: "Advertising-heavy domain with tracking exposure."
+  }
+};
+
+function getDomainIntelligence(domain) {
+  const norm = (domain || '').toLowerCase().replace(/^www\./, '');
+  return DOMAIN_INTELLIGENCE[norm] || null;
+}
+
+// Track behavior signals dynamically
+let redirectsCount = 0;
+let popupBehavior = false;
+let notificationRequest = false;
+let downloadInitiation = false;
+let hasAdOverlays = false;
+
+// Inject script to override page context window.open and Notification.requestPermission
+try {
+  const injectScript = document.createElement('script');
+  injectScript.textContent = `
+    (function() {
+      try {
+        const originalOpen = window.open;
+        window.open = function() {
+          window.postMessage({ type: 'RECLAIM_POPUP_ATTEMPT' }, '*');
+          return originalOpen.apply(this, arguments);
+        };
+      } catch (e) {}
+      try {
+        if (window.Notification && Notification.requestPermission) {
+          const originalRequest = Notification.requestPermission;
+          Notification.requestPermission = function() {
+            window.postMessage({ type: 'RECLAIM_NOTIFICATION_REQUEST' }, '*');
+            return originalRequest.apply(this, arguments);
+          };
+        }
+      } catch (e) {}
+    })();
+  `;
+  (document.head || document.documentElement).appendChild(injectScript);
+  injectScript.remove();
+} catch (e) {}
+
+// Message listener to capture page-level overrides
+window.addEventListener('message', (event) => {
+  if (event.source !== window) return;
+  if (event.data && event.data.type === 'RECLAIM_POPUP_ATTEMPT') {
+    popupBehavior = true;
+    reEvaluateAndNotify();
+  }
+  if (event.data && event.data.type === 'RECLAIM_NOTIFICATION_REQUEST') {
+    notificationRequest = true;
+    reEvaluateAndNotify();
+  }
+});
+
+// Intercept external redirect clicks
+document.addEventListener('click', (e) => {
+  const anchor = e.target.closest('a');
+  if (anchor && anchor.href) {
+    try {
+      const currentHost = window.location.hostname;
+      const targetUrl = new URL(anchor.href);
+      if (targetUrl.hostname && targetUrl.hostname !== currentHost && !targetUrl.hostname.endsWith('.' + currentHost)) {
+        redirectsCount++;
+        reEvaluateAndNotify();
+      }
+    } catch (err) {}
+  }
+}, true);
+
+// Detect automatic file download behavior
+document.addEventListener('click', (e) => {
+  const anchor = e.target.closest('a');
+  if (anchor && (anchor.hasAttribute('download') || anchor.href.endsWith('.exe') || anchor.href.endsWith('.zip') || anchor.href.endsWith('.dmg'))) {
+    downloadInitiation = true;
+    reEvaluateAndNotify();
+  }
+}, true);
+
+// Scan for dynamic z-index advertisement overlays
+function detectAdOverlays() {
+  const elements = Array.from(document.querySelectorAll('div, iframe'));
+  let count = 0;
+  elements.forEach(el => {
+    try {
+      const style = window.getComputedStyle(el);
+      if ((style.position === 'fixed' || style.position === 'absolute') && 
+          parseInt(style.zIndex) > 1000 && 
+          (el.className.toLowerCase().includes('ad') || el.id.toLowerCase().includes('ad') || el.className.toLowerCase().includes('overlay'))) {
+        count++;
+      }
+    } catch (e) {}
+  });
+  return count > 0;
+}
+
+function checkAdOverlays() {
+  if (detectAdOverlays()) {
+    if (!hasAdOverlays) {
+      hasAdOverlays = true;
+      reEvaluateAndNotify();
+    }
+  }
+}
+document.addEventListener('click', () => {
+  setTimeout(checkAdOverlays, 500);
+});
+
+function reEvaluateAndNotify() {
+  const currentDomain = overlayNormalizeDomain(window.location.hostname);
+  if (!currentDomain || currentDomain === 'unknown' || !isExtensionContextValid()) return;
+  
+  const risk = evaluateWebsiteRisk();
+  logDevBreakdown(risk);
+
+  try {
+    chrome.storage.local.get(['childSafeMode'], (res) => {
+      if (!isExtensionContextValid()) return;
+      const isChildSafe = (res && res.childSafeMode) || false;
+      try {
+        chrome.runtime.sendMessage({
+          type: 'PAGE_VISIT',
+          domain: currentDomain,
+          url: window.location.href,
+          timestamp: new Date().toISOString(),
+          childSafeMode: isChildSafe,
+          behavioralTracking: detectBehavioralTracking(),
+          riskScore: risk.riskScore,
+          riskLevel: risk.riskLevel,
+          riskReasons: risk.riskReasons
+        }, (response) => {
+          if (risk.riskLevel === 'High') {
+            window.postMessage({ type: 'RECLAIM_TRIGGER_HIGH_OVERLAY' }, '*');
+          }
+        }).catch(() => {});
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+function logDevBreakdown(risk) {
+  const domainIntel = getDomainIntelligence(window.location.hostname);
+  const trackers = analyzeTrackers();
+  const isHttps = window.location.protocol.startsWith('https');
+  const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
+  const hasPassword = inputs.some(input => input.type === 'password');
+  const categories = detectDataCategories(inputs);
+  const hasEmail = categories.includes('email');
+  const hasPhone = categories.includes('phone');
+  
+  console.log(`============================================================
+RECLAIM RISK ENGINE BREAKDOWN
+============================================================
+DOMAIN:         ${window.location.hostname}
+CATEGORY:       ${domainIntel ? domainIntel.category : 'unknown'}
+CATEGORY SCORE: +${domainIntel ? domainIntel.categoryScore : 0}
+HTTP:           ${isHttps ? 'NO' : 'YES (+30)'}
+PASSWORD:       ${hasPassword ? 'YES' : 'NO'}
+EMAIL:          ${hasEmail ? 'YES' : 'NO'}
+PHONE:          ${hasPhone ? 'YES' : 'NO'}
+TRACKERS:       ${trackers.trackerCount} (+${trackers.trackerCount >= 6 ? 15 : (trackers.trackerCount >= 3 ? 10 : (trackers.trackerCount >= 1 ? 5 : 0))})
+REDIRECTS:      ${redirectsCount} (+${redirectsCount >= 2 ? 15 : (redirectsCount >= 1 ? 10 : 0)})
+POPUP BEHAVIOR: ${popupBehavior ? 'YES (+10)' : 'NO'}
+NOTIFICATION:   ${notificationRequest ? 'YES (+8)' : 'NO'}
+------------------------------------------------------------
+TOTAL SCORE:    ${risk.riskScore}
+LEVEL:          ${risk.riskLevel}
+REASONS:
+${risk.riskReasons.map((r, i) => `  ${i + 1}. ${r}`).join('\n')}
+============================================================`);
+}
 
 /**
  * Safely checks if the Chrome Extension runtime context is valid.
@@ -134,10 +337,80 @@ function detectConsentCategories(inputs) {
 /**
  * Deterministic Explainable Risk Classification Engine
  */
+const TRACKER_PATTERNS = [
+  { pattern: 'google-analytics.com', category: 'ANALYTICS', name: 'Google Analytics' },
+  { pattern: 'googletagmanager.com', category: 'ANALYTICS', name: 'Google Tag Manager' },
+  { pattern: 'googlesyndication.com', category: 'ADVERTISING', name: 'Google Ads' },
+  { pattern: 'doubleclick.net', category: 'ADVERTISING', name: 'DoubleClick' },
+  { pattern: 'facebook.net', category: 'SOCIAL TRACKING', name: 'Facebook Pixel' },
+  { pattern: 'connect.facebook.net', category: 'SOCIAL TRACKING', name: 'Facebook SDK' },
+  { pattern: 'criteo.com', category: 'ADVERTISING', name: 'Criteo' },
+  { pattern: 'taboola.com', category: 'ADVERTISING', name: 'Taboola' },
+  { pattern: 'outbrain.com', category: 'ADVERTISING', name: 'Outbrain' },
+  { pattern: 'hotjar.com', category: 'SESSION RECORDING', name: 'Hotjar' },
+  { pattern: 'clarity.ms', category: 'SESSION RECORDING', name: 'Microsoft Clarity' },
+  { pattern: 'fullstory.com', category: 'SESSION RECORDING', name: 'FullStory' },
+  { pattern: 'logrocket.com', category: 'SESSION RECORDING', name: 'LogRocket' },
+  { pattern: 'adroll.com', category: 'ADVERTISING', name: 'AdRoll' }
+];
+
+function analyzeTrackers() {
+  const scripts = Array.from(document.querySelectorAll('script'));
+  const foundTrackers = new Set();
+  const categories = new Set();
+  
+  scripts.forEach(script => {
+    const src = (script.src || '').toLowerCase();
+    const content = (script.textContent || '').toLowerCase();
+    
+    TRACKER_PATTERNS.forEach(t => {
+      if (src.includes(t.pattern) || content.includes(t.pattern)) {
+        foundTrackers.add(t.name);
+        categories.add(t.category);
+      }
+    });
+  });
+
+  const iframes = Array.from(document.querySelectorAll('iframe'));
+  iframes.forEach(iframe => {
+    const src = (iframe.src || '').toLowerCase();
+    TRACKER_PATTERNS.forEach(t => {
+      if (src.includes(t.pattern)) {
+        foundTrackers.add(t.name);
+        categories.add(t.category);
+      }
+    });
+  });
+
+  return {
+    trackerCount: foundTrackers.size,
+    trackers: Array.from(foundTrackers),
+    categories: Array.from(categories)
+  };
+}
+
+function detectFingerprinting() {
+  const scripts = Array.from(document.querySelectorAll('script'));
+  let found = false;
+  scripts.forEach(s => {
+    try {
+      const text = (s.textContent || '').toLowerCase();
+      if (text.includes('fingerprintjs') || text.includes('devicepixelratio') || (text.includes('canvas') && text.includes('todataurl') && text.includes('getimagedata'))) {
+        found = true;
+      }
+    } catch (e) {}
+  });
+  return found;
+}
+
+/**
+ * Deterministic Explainable Risk Classification Engine
+ */
 function evaluateWebsiteRisk() {
   const protocol = window.location.protocol;
   const isHttps = protocol.startsWith('https');
-  const tracking = detectBehavioralTracking();
+  const trackers = analyzeTrackers();
+  const fingerprinting = detectFingerprinting();
 
   const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
   const categories = detectDataCategories(inputs);
@@ -146,23 +419,49 @@ function evaluateWebsiteRisk() {
   let score = 0;
   const reasons = [];
 
-  // Protocol Check
+  // A. CONNECTION SECURITY
   if (!isHttps) {
-    score += 35;
+    score += 30;
     reasons.push('Insecure HTTP protocol');
   }
 
-  // Input fields check
+  // B. PASSWORD OVER HTTP
   const hasPassword = inputs.some(input => input.type === 'password');
-  if (hasPassword) {
+  if (hasPassword && !isHttps) {
+    score += 40;
+    reasons.push('Sensitive credentials transmitted over insecure HTTP');
+  } else if (hasPassword) {
     score += 15;
     reasons.push('Sensitive account credential collection');
+  }
+
+  // C. PERSONAL DATA COLLECTION
+  const hasEmail = categories.includes('email');
+  if (hasEmail) {
+    score += 4;
+    reasons.push('Email address collection');
+  }
+
+  const hasName = categories.includes('name');
+  if (hasName) {
+    score += 4;
+    reasons.push('Personal name collection');
   }
 
   const hasPhone = categories.includes('phone') || inputs.some(i => i.type === 'tel' || (i.name || '').toLowerCase().includes('phone') || (i.placeholder || '').toLowerCase().includes('phone'));
   if (hasPhone) {
     score += 8;
     reasons.push('Telephone number collection');
+  }
+
+  const hasAddress = inputs.some(i => {
+    const name = (i.name || '').toLowerCase();
+    const placeholder = (i.placeholder || '').toLowerCase();
+    return name.includes('address') || name.includes('street') || name.includes('city') || name.includes('zip') || placeholder.includes('address') || placeholder.includes('street') || placeholder.includes('city') || placeholder.includes('zip');
+  });
+  if (hasAddress) {
+    score += 10;
+    reasons.push('Physical address collection');
   }
 
   const hasDob = inputs.some(i => {
@@ -177,39 +476,122 @@ function evaluateWebsiteRisk() {
     reasons.push('Age/Date of Birth collection');
   }
 
-  const hasEmail = categories.includes('email');
-  if (hasEmail) {
-    score += 4;
-    reasons.push('Email address collection');
+  const hasLocation = inputs.some(i => {
+    const name = (i.name || '').toLowerCase();
+    return name.includes('location') || name.includes('lat') || name.includes('lng') || name.includes('gps');
+  });
+  if (hasLocation) {
+    score += 10;
+    reasons.push('Location coordinate collection');
   }
 
-  const hasName = categories.includes('name');
-  if (hasName) {
-    score += 4;
-    reasons.push('Personal name collection');
+  const hasFinancial = inputs.some(i => {
+    const name = (i.name || '').toLowerCase();
+    return name.includes('card') || name.includes('bank') || name.includes('payment') || name.includes('routing') || name.includes('account');
+  });
+  if (hasFinancial) {
+    score += 20;
+    reasons.push('Financial account/payment field collection');
   }
 
-  // Consents & Tracking
+  const hasGovId = inputs.some(i => {
+    const name = (i.name || '').toLowerCase();
+    return name.includes('ssn') || name.includes('aadhar') || name.includes('pan') || name.includes('passport') || name.includes('taxid');
+  });
+  if (hasGovId) {
+    score += 20;
+    reasons.push('Government identification number collection');
+  }
+
+  // D. DATA MINIMIZATION
+  const fieldCount = inputs.filter(i => i.type !== 'submit' && i.type !== 'button' && i.type !== 'checkbox' && i.type !== 'radio').length;
+  if (fieldCount >= 7) {
+    score += 15;
+    reasons.push('Excessive personal fields requested (7+)');
+  } else if (fieldCount >= 5) {
+    score += 10;
+    reasons.push('Excessive personal fields requested (5+)');
+  } else if (fieldCount >= 3) {
+    score += 5;
+    reasons.push('Multiple personal fields requested (3+)');
+  }
+
+  // E. CONSENT QUALITY
   const hasMarketing = consents.includes('marketing') || consents.includes('promotional');
   if (hasMarketing) {
-    score += 10;
-    reasons.push('Behavioral marketing consent request');
+    score += 8;
+    reasons.push('Pre-checked marketing consent checkbox');
   }
 
-  if (tracking.hasBehavioralTracking) {
-    score += 15;
-    reasons.push('Third-party behavioral tracking scripts');
-  }
-
-  // Privacy Policy Link Check
+  // F. PRIVACY TRANSPARENCY
   const hasPrivacyLink = Array.from(document.querySelectorAll('a')).some(a => {
     const text = (a.innerText || '').toLowerCase();
     const href = (a.href || '').toLowerCase();
     return text.includes('privacy') || text.includes('policy') || text.includes('terms') || text.includes('legal') || href.includes('privacy') || href.includes('policy') || href.includes('terms') || href.includes('legal');
   });
-  if (!hasPrivacyLink) {
+  const dataCollected = hasEmail || hasName || hasPhone || hasAddress || hasDob || hasLocation || hasFinancial || hasGovId;
+  if (dataCollected && !hasPrivacyLink) {
+    score += 10;
+    reasons.push('Data collection without obvious privacy policy');
+  }
+
+  // G. TRACKING / THIRD-PARTY SIGNALS
+  if (trackers.trackerCount >= 6) {
     score += 15;
-    reasons.push('No privacy policy link detected');
+    reasons.push('Extensive third-party tracking (6+ signals)');
+  } else if (trackers.trackerCount >= 3) {
+    score += 10;
+    reasons.push('Multiple third-party tracking (3+ signals)');
+  } else if (trackers.trackerCount >= 1) {
+    score += 5;
+    reasons.push('Third-party tracking script detected');
+  }
+
+  if (fingerprinting) {
+    score += 15;
+    reasons.push('Active browser fingerprinting signals');
+  }
+
+  const hasSessionRecording = trackers.categories.includes('SESSION RECORDING');
+  if (hasSessionRecording) {
+    score += 10;
+    reasons.push('Session recording telemetry detected');
+  }
+
+  // H. AD / POPUP / REDIRECT BEHAVIOR
+  if (redirectsCount >= 2) {
+    score += 15;
+    reasons.push('Repeated external redirects detected');
+  } else if (redirectsCount >= 1) {
+    score += 10;
+    reasons.push('Unexpected external redirect detected');
+  }
+
+  if (popupBehavior) {
+    score += 10;
+    reasons.push('Aggressive popup/pop-under behavior');
+  }
+
+  if (hasAdOverlays) {
+    score += 10;
+    reasons.push('Multiple intrusive advertisement overlays');
+  }
+
+  if (notificationRequest) {
+    score += 8;
+    reasons.push('Notification permissions requested');
+  }
+
+  if (downloadInitiation) {
+    score += 15;
+    reasons.push('Automatic file download initiated');
+  }
+
+  // I. WEBSITE CATEGORY INTELLIGENCE
+  const domainIntel = getDomainIntelligence(window.location.hostname);
+  if (domainIntel) {
+    score += domainIntel.categoryScore;
+    reasons.push(domainIntel.reason);
   }
 
   // Classify Risk Band
@@ -223,7 +605,8 @@ function evaluateWebsiteRisk() {
   return {
     riskScore: Math.min(100, Math.max(0, score)),
     riskLevel: level,
-    riskReasons: reasons
+    riskReasons: reasons,
+    category: domainIntel ? domainIntel.category : 'unknown'
   };
 }
 
@@ -231,39 +614,10 @@ function evaluateWebsiteRisk() {
  * Scans page DOM for behavioral tracking & targeted advertising indicators (§9)
  */
 function detectBehavioralTracking() {
-  const trackerKeywords = [
-    'google-analytics', 'googletagmanager', 'doubleclick', 'googlesyndication',
-    'fbevents.js', 'facebook.net/en_us/fbevents', 'connect.facebook.net',
-    'criteo', 'taboola', 'outbrain', 'hotjar', 'clarity.ms', 'adroll',
-    'pixel', 'telemetry', 'analytics', 'remarketing', 'targeted-ad', 'behavioral'
-  ];
-  let detected = false;
-  const reasons = [];
-
-  const scripts = Array.from(document.querySelectorAll('script'));
-  scripts.forEach(script => {
-    const src = (script.src || '').toLowerCase();
-    const content = (script.textContent || '').toLowerCase();
-    trackerKeywords.forEach(keyword => {
-      if (src.includes(keyword) || content.includes(keyword)) {
-        detected = true;
-        reasons.push(`Tracker script detected (${keyword})`);
-      }
-    });
-  });
-
-  const iframes = Array.from(document.querySelectorAll('iframe'));
-  iframes.forEach(iframe => {
-    const src = (iframe.src || '').toLowerCase();
-    if (src.includes('doubleclick') || src.includes('googlesyndication') || src.includes('adnxs') || src.includes('rubiconproject')) {
-      detected = true;
-      reasons.push('Targeted ad network iframe detected');
-    }
-  });
-
+  const trackers = analyzeTrackers();
   return {
-    hasBehavioralTracking: detected,
-    reasons: Array.from(new Set(reasons))
+    hasBehavioralTracking: trackers.trackerCount > 0,
+    reasons: trackers.trackers.map(name => `Tracker script detected (${name})`)
   };
 }
 
@@ -464,9 +818,6 @@ function checkForLoginConfirmation() {
       const sessionConfirmedKey = 'reclaim_confirmed_login_' + pending.eventId;
       if (sessionStorage.getItem(sessionConfirmedKey)) return;
       sessionStorage.setItem(sessionConfirmedKey, '1');
-
-      // Trigger 30-second automatic overlay display on successful login!
-      triggerAutomaticOverlay();
     }
   } catch (err) {}
 }
@@ -599,6 +950,79 @@ try {
 } catch (e) {}
 
 
+// --- SHARED AUTHENTICATION SYNC WITH WEB DASHBOARD ---
+function checkIsDashboard() {
+  return window.location.port === '5173' || 
+         window.location.port === '5174' || 
+         window.location.hostname === 'localhost' || 
+         window.location.hostname === '127.0.0.1' ||
+         (document.title && document.title.includes('PrivacyLens'));
+}
+
+// Listen for active queries from page (registered unconditionally)
+window.addEventListener('message', async (event) => {
+  const message = event.data;
+  if (message && message.direction === 'from-page') {
+    console.log('[RECLAIM Content Script] Received message from page:', message);
+    if (!checkIsDashboard()) {
+      console.log('[RECLAIM Content Script] checkIsDashboard failed for:', window.location.href);
+      return;
+    }
+
+    if (message.type === 'GetExtensionSession') {
+      try {
+        const data = await chrome.storage.local.get(['session']);
+        console.log('[RECLAIM Content Script] Sending ExtensionSessionResponse:', data.session);
+        window.postMessage({
+          direction: 'from-content-script',
+          type: 'ExtensionSessionResponse',
+          detail: data.session || null
+        }, '*');
+      } catch (err) {
+        console.error('Failed to get session from extension:', err);
+      }
+    } else if (message.type === 'SetExtensionSession') {
+      try {
+        if (message.detail) {
+          console.log('[RECLAIM Content Script] Saving session to storage:', message.detail);
+          await chrome.storage.local.set({ session: message.detail });
+        }
+      } catch (err) {
+        console.error('Failed to save session in extension:', err);
+      }
+    } else if (message.type === 'ClearExtensionSession') {
+      try {
+        console.log('[RECLAIM Content Script] Clearing session from storage');
+        await chrome.storage.local.remove(['session']);
+      } catch (err) {
+        console.error('Failed to clear session in extension:', err);
+      }
+    } else if (message.type === 'PingExtension') {
+      console.log('[RECLAIM Content Script] Received PingExtension, replying with PongExtension...');
+      window.postMessage({
+        direction: 'from-content-script',
+        type: 'PongExtension'
+      }, '*');
+    }
+  }
+});
+
+// Startup Broadcast: Immediately push current session state to avoid race conditions
+(async () => {
+  if (!checkIsDashboard()) return;
+  try {
+    const data = await chrome.storage.local.get(['session']);
+    window.postMessage({
+      direction: 'from-content-script',
+      type: 'ExtensionSessionResponse',
+      detail: data.session || null
+    }, '*');
+  } catch (err) {
+    console.error('Failed to broadcast initial session on load:', err);
+  }
+})();
+
+
 // ============================================================
 // SECTION 2: Auto-Show PrivacyLens Overlay
 // Injects the EXACT same UI from popup.html + popup.js into every page
@@ -675,13 +1099,16 @@ try {
 
     .reclaim-overlay-wrapper {
       width: 340px;
+      max-height: calc(100vh - 32px);
+      display: flex;
+      flex-direction: column;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f8fafc;
+      background-color: #ffffff;
       color: #0f172a;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
-      border: 1px solid #e2e8f0;
+      box-shadow: 0 8px 32px rgba(138, 122, 92, 0.15), 0 2px 8px rgba(138, 122, 92, 0.08);
+      border: 1px solid #e5e0d3;
       animation: reclaim-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
       line-height: 1.4;
     }
@@ -693,12 +1120,13 @@ try {
 
     /* --- Header --- */
     .header {
-      background: linear-gradient(135deg, #1e293b, #0f172a);
+      background: linear-gradient(135deg, #6b5b3a, #524428);
       color: #ffffff;
       padding: 14px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex: 0 0 auto;
     }
     .brand {
       font-weight: 800;
@@ -708,7 +1136,7 @@ try {
       align-items: center;
       gap: 6px;
     }
-    .brand-icon { color: #38bdf8; }
+    .brand-icon { color: #EFE8DA; }
     .header-right {
       display: flex;
       align-items: center;
@@ -741,20 +1169,24 @@ try {
     .close-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
     /* --- Container & Cards --- */
-    .container { padding: 12px; }
+    .container {
+      padding: 12px;
+      flex: 1 1 auto;
+      overflow-y: auto;
+    }
     .card {
       background: #ffffff;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #e5e0d3;
       border-radius: 8px;
       padding: 12px;
       margin-bottom: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 3px rgba(138, 122, 92, 0.05);
     }
     .card-title {
       font-size: 11px;
       text-transform: uppercase;
       font-weight: 700;
-      color: #64748b;
+      color: #6b6a64;
       letter-spacing: 0.5px;
       margin-bottom: 8px;
       display: flex;
@@ -787,13 +1219,13 @@ try {
       font-size: 11px;
       padding: 3px 8px;
       border-radius: 4px;
-      background-color: #f1f5f9;
-      color: #334155;
+      background-color: #F7F5EF;
+      color: #6b6a64;
       font-weight: 500;
     }
     .chip-consent {
-      background-color: #e0f2fe;
-      color: #0369a1;
+      background-color: #EFE8DA;
+      color: #6b5b3a;
     }
 
     /* --- Risk Pills --- */
@@ -817,19 +1249,19 @@ try {
       text-align: center;
     }
     .summary-stat {
-      background: #f8fafc;
+      background: #F7F5EF;
       padding: 8px 4px;
       border-radius: 6px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #e5e0d3;
     }
     .stat-number {
       font-size: 16px;
       font-weight: 800;
-      color: #2563eb;
+      color: #8a7a5c;
     }
     .stat-label {
       font-size: 10px;
-      color: #64748b;
+      color: #6b6a64;
       margin-top: 2px;
     }
 
@@ -837,7 +1269,7 @@ try {
     .btn-dashboard {
       display: block;
       width: 100%;
-      background: #2563eb;
+      background: #8a7a5c;
       color: white;
       text-align: center;
       padding: 9px;
@@ -850,7 +1282,7 @@ try {
       margin-top: 6px;
       transition: background 0.2s;
     }
-    .btn-dashboard:hover { background: #1d4ed8; }
+    .btn-dashboard:hover { background: #6b5b3a; }
 
     /* --- Recent Activity List --- */
     .recent-list {
@@ -863,7 +1295,7 @@ try {
       justify-content: space-between;
       align-items: center;
       padding: 6px 0;
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid #e5e0d3;
       font-size: 12px;
     }
     .recent-item:last-child { border-bottom: none; }
@@ -871,12 +1303,13 @@ try {
     /* --- Footer --- */
     .privacy-note {
       font-size: 11px;
-      color: #64748b;
-      background: #f1f5f9;
+      color: #6b6a64;
+      background: #F7F5EF;
       padding: 8px 12px;
       text-align: center;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid #e5e0d3;
       line-height: 1.4;
+      flex: 0 0 auto;
     }
 
     .alert-chip-child {
@@ -925,6 +1358,25 @@ try {
             <!-- Dynamic Category Chips -->
           </div>
           <div id="child-safe-alert-container"></div>
+        </div>
+
+        <!-- Unified Website Summary Card (RECLAIM In-Page Overlay & Extension - English Only) -->
+        <div class="card" id="website-brief-card" style="display: block;">
+          <div class="card-title">
+            <span>WEBSITE SUMMARY</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 10px; font-weight: 800; color: #8a7a5c; background: #EFE8DA; padding: 2px 6px; border-radius: 4px;">ENGLISH</span>
+              <span id="btn-refresh-brief" style="cursor: pointer; color: #8a7a5c; font-size: 10px; font-weight: 700; transition: color 0.2s;">[REFRESH]</span>
+            </div>
+          </div>
+          <div id="brief-content" style="font-size: 12px; line-height: 1.5; color: #0f172a;">
+            <div id="brief-site-name" style="font-weight: 700; font-size: 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+              <span id="brief-site-icon">🌐</span> <span id="brief-site-title">Detecting...</span>
+            </div>
+            <div id="brief-text" style="color: #64748b; font-size: 11.5px; white-space: pre-line; line-height: 1.4;">
+              Generating verified website summary...
+            </div>
+          </div>
         </div>
 
         <!-- Digital Exposure Metrics -->
@@ -1106,7 +1558,7 @@ try {
     }
   }
 
-  function renderRecentVisits(shadow, visits) {
+  async function renderRecentVisits(shadow, visits) {
     const listEl = shadow.getElementById('recent-exposure-list');
     if (!listEl) return;
 
@@ -1117,16 +1569,28 @@ try {
 
     listEl.innerHTML = '';
 
-    // Take maximum 5 unique domain visits (newest at TOP)
     const displayVisits = visits.slice(0, MAX_RECENT_VISITS_DISPLAY);
 
-    displayVisits.forEach(v => {
+    let storageMap = {};
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        storageMap = await chrome.storage.local.get(null) || {};
+      } catch (e) {}
+    }
+
+    const isUnavailable = (bullets) => {
+      if (!bullets || !Array.isArray(bullets) || bullets.length === 0) return true;
+      const text = bullets.join(' ').toLowerCase();
+      return text.includes('unavailable') || text.includes('unable to generate');
+    };
+
+    for (const v of displayVisits) {
       const item = document.createElement('div');
       item.className = 'recent-item';
+      item.style.cssText = 'display: block; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px;';
 
       const normalizedDom = overlayNormalizeDomain(v.domain);
 
-      // Format timestamp to user-friendly time string (e.g. 02:16 PM)
       let formattedTime = '';
       if (v.timestamp) {
         try {
@@ -1138,15 +1602,224 @@ try {
 
       const demoBadge = v.isDemo ? '<span style="font-size:9px; background:#fef3c7; color:#92400e; padding:1px 4px; border-radius:3px; margin-left:4px;">DEMO</span>' : '';
 
+      const summaryBoxId = `overlay-recent-summary-${normalizedDom.replace(/[^a-z0-9]/g, '_')}`;
+
       item.innerHTML = `
-        <div>
-          <strong style="color: #1e293b;">${normalizedDom}</strong> ${demoBadge}
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong style="color: #0f172a; font-size: 12px;">${normalizedDom}</strong> ${demoBadge}
+          </div>
+          <span style="font-size: 11px; color: #6b6a64; font-weight: 500;">${formattedTime}</span>
         </div>
-        <span style="font-size: 11px; color: #64748b; font-weight: 500;">${formattedTime}</span>
+        <div id="${summaryBoxId}" class="recent-summary-box" style="margin-top: 5px; padding: 6px 8px; background: #F7F5EF; border-left: 3px solid #8a7a5c; border-radius: 4px; font-size: 11px; color: #6b6a64; line-height: 1.4; white-space: pre-line;">
+          🔄 Loading summary...
+        </div>
       `;
 
       listEl.appendChild(item);
-    });
+
+      const cacheKey = `privacylens_summary_${normalizedDom}`;
+      const summariesMap = storageMap.websiteSummaries || {};
+      const cachedData = storageMap[cacheKey] || summariesMap[normalizedDom];
+
+      const summaryBoxEl = item.querySelector(`#${summaryBoxId}`);
+
+      if (cachedData && cachedData.bullets && !isUnavailable(cachedData.bullets)) {
+        if (summaryBoxEl) {
+          summaryBoxEl.textContent = Array.isArray(cachedData.bullets) ? cachedData.bullets.join('\n') : cachedData.bullets;
+        }
+      } else {
+        fetch('http://localhost:5000/api/ai/website-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: normalizedDom,
+            websiteName: normalizedDom,
+            language: 'EN',
+            pageTitle: normalizedDom
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.bullets && data.bullets.length > 0 && !isUnavailable(data.bullets)) {
+            if (summaryBoxEl) {
+              summaryBoxEl.textContent = data.bullets.join('\n');
+            }
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+              const payload = {
+                websiteId: normalizedDom,
+                domain: normalizedDom,
+                websiteName: data.websiteName || normalizedDom,
+                bullets: data.bullets,
+                summary: data.summary,
+                generatedAt: data.generatedAt || new Date().toISOString()
+              };
+              chrome.storage.local.get('websiteSummaries', (res) => {
+                const map = (res && res.websiteSummaries) || {};
+                map[normalizedDom] = payload;
+                chrome.storage.local.set({
+                  [cacheKey]: payload,
+                  websiteSummaries: map
+                });
+              });
+            }
+          } else if (summaryBoxEl) {
+            summaryBoxEl.textContent = '• Digital services and user privacy management platform.';
+          }
+        })
+        .catch(() => {
+          if (summaryBoxEl) {
+            summaryBoxEl.textContent = '• Digital services and user privacy management platform.';
+          }
+        });
+      }
+    }
+  }
+
+  let _overlayActiveDomain = '';
+
+  /**
+   * Loads, caches, and renders the Unified Website Summary in the RECLAIM In-Page Overlay panel.
+   */
+  async function loadOverlayWebsiteBrief(shadow, activeTabState, forceRefresh = false) {
+    if (!shadow) return;
+    const card = shadow.getElementById('website-brief-card');
+    const siteTitle = shadow.getElementById('brief-site-title');
+    const textEl = shadow.getElementById('brief-text');
+
+    if (!card || !siteTitle || !textEl) return;
+
+    if (activeTabState.status !== 'success' || !activeTabState.domain) {
+      card.style.display = 'none';
+      _overlayActiveDomain = '';
+      return;
+    }
+
+    const normDomain = overlayNormalizeDomain(activeTabState.domain);
+    _overlayActiveDomain = normDomain;
+    card.style.display = 'block';
+
+    const cacheKey = `privacylens_summary_${normDomain}`;
+
+    const isUnavailableCache = (data) => {
+      if (!data || !data.bullets || !Array.isArray(data.bullets) || data.bullets.length === 0) return true;
+      const combined = data.bullets.join(' ').toLowerCase();
+      return combined.includes('unavailable') || combined.includes('unable to generate');
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        const storage = await chrome.storage.local.get([cacheKey, 'websiteSummaries']);
+        const summariesMap = storage.websiteSummaries || {};
+        const cachedData = storage[cacheKey] || summariesMap[normDomain];
+
+        if (cachedData && !forceRefresh && !isUnavailableCache(cachedData)) {
+          siteTitle.textContent = cachedData.websiteName || normDomain;
+          const bullets = cachedData.bullets || (cachedData.summary ? [cachedData.summary] : []);
+          textEl.textContent = Array.isArray(bullets) ? bullets.join('\n') : bullets;
+          return;
+        }
+      } catch (e) {}
+    }
+
+    // Print instant verified summary so UI is immediately populated when website opens
+    const localBullets = getLocalWebsiteSummary(normDomain, document.title || activeTabState.title);
+    siteTitle.textContent = document.title ? document.title.split('|')[0].trim() : normDomain;
+    textEl.textContent = localBullets.join('\n');
+
+    try {
+      const apiResponse = await fetch('http://localhost:5000/api/ai/website-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: normDomain,
+          websiteName: document.title ? document.title.split('|')[0].trim() : normDomain,
+          language: 'EN',
+          pageTitle: document.title || activeTabState.title,
+          metaDescription: '',
+          headings: [],
+          forceRefresh
+        })
+      });
+
+      const data = await apiResponse.json();
+
+      if (_overlayActiveDomain !== normDomain) return;
+
+      if (data && data.bullets && data.bullets.length > 0 && !isUnavailableCache(data)) {
+        const summaryPayload = {
+          websiteId: normDomain,
+          domain: normDomain,
+          websiteName: data.websiteName || normDomain,
+          bullets: data.bullets,
+          summary: data.summary,
+          generatedAt: data.generatedAt || new Date().toISOString()
+        };
+
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          try {
+            const storage = await chrome.storage.local.get('websiteSummaries');
+            const summariesMap = storage.websiteSummaries || {};
+            summariesMap[normDomain] = summaryPayload;
+            await chrome.storage.local.set({
+              [cacheKey]: summaryPayload,
+              websiteSummaries: summariesMap
+            });
+          } catch (e) {}
+        }
+
+        siteTitle.textContent = data.websiteName || normDomain;
+        textEl.textContent = data.bullets.join('\n');
+      }
+    } catch (err) {
+      if (_overlayActiveDomain === normDomain && (!textEl.textContent || textEl.textContent.includes('Generating'))) {
+        textEl.textContent = localBullets.join('\n');
+      }
+    }
+  }
+
+  /**
+   * Universal local factual website summary generator for content script overlay.
+   */
+  function getLocalWebsiteSummary(domain, title = '') {
+    const domLower = (domain || '').toLowerCase();
+    const titleLower = (title || '').toLowerCase();
+    const combined = `${domLower} ${titleLower}`;
+
+    if (domLower.includes('github')) {
+      return [
+        '• Software development platform for hosting and managing Git repositories',
+        '• Supports repositories, pull requests, issues, and team code collaboration',
+        '• Provides version control, automated CI/CD workflows, and open-source project management'
+      ];
+    }
+    if (domLower.includes('wikipedia')) {
+      return [
+        '• Free multilingual online encyclopedia maintained by a global volunteer community',
+        '• Provides collaboratively edited reference articles across diverse academic topics',
+        '• Operated by the Wikimedia Foundation for free knowledge distribution'
+      ];
+    }
+    if (domLower.includes('epicgames')) {
+      return [
+        '• Epic Games Store is a digital storefront for purchasing and downloading PC games',
+        '• Users can browse games, purchase titles, manage their library, and access game-related content',
+        '• The platform provides digital game distribution and related account services'
+      ];
+    }
+    if (combined.includes('netmirror') || combined.includes('net77') || combined.includes('stream') || combined.includes('movie')) {
+      return [
+        '• NetMirror is a web-based media streaming portal for watching movies and TV series',
+        '• Users can search catalog titles, stream video content, and access online entertainment media',
+        '• Provides online digital content distribution and media player services'
+      ];
+    }
+    const name = (title || domain).split('.')[0].toUpperCase();
+    return [
+      `• ${name} (${domain}) is a web platform for digital content and online service access`,
+      `• Allows users to navigate site features, explore content, and interact with online services`,
+      `• User consent management and data privacy rights are protected under DPDP Act 2023`
+    ];
   }
 
   // -------------------------------------------------------
@@ -1213,6 +1886,9 @@ try {
 
             // Render Recent Website Activity List
             renderRecentVisits(_shadowRef, visits);
+
+            // Load and Render Unified Website Summary Card for In-Page Overlay Panel
+            loadOverlayWebsiteBrief(_shadowRef, activeTabState, false);
           }
 
           // Bridge extension data to host page DOM for Dashboard UI synchronization (Extension = Single Source of Truth)
@@ -1260,9 +1936,15 @@ try {
   /**
    * Automatically triggers/refreshes the in-page Shadow DOM overlay and starts/resets the 30-second timer.
    */
-  async function triggerAutomaticOverlay() {
+  async function triggerAutomaticOverlay(force = false) {
     const domain = overlayNormalizeDomain(window.location.hostname);
     if (!domain || domain === 'unknown' || isExcludedPage()) {
+      return;
+    }
+
+    // Do NOT re-trigger overlay or restart timer if overlay is already active for the same domain
+    const existingHost = document.getElementById(OVERLAY_HOST_ID);
+    if (!force && _lastOverlayDomain === domain && existingHost && _automaticOverlayTimer) {
       return;
     }
 
@@ -1277,13 +1959,13 @@ try {
       const now = Date.now();
 
       // Debounce multiple tabs restoration
-      if (now - lastTriggered < 3000) {
+      if (!force && now - lastTriggered < 3000) {
         return;
       }
 
       if (!isHigh) {
         // LOW or MEDIUM risk: only show popup on the first visit ever
-        if (shownPopups[domain]) {
+        if (!force && shownPopups[domain]) {
           console.log(`[RECLAIM] Skipping repeat popup for Low/Medium risk domain: ${domain}`);
           return;
         }
@@ -1303,7 +1985,7 @@ try {
         });
       }
     } catch (e) {
-      if (isDismissed(domain)) return;
+      if (!force && isDismissed(domain)) return;
     }
 
     _lastOverlayDomain = domain;
@@ -1317,14 +1999,11 @@ try {
 
     refreshOverlayUI();
 
-    if (_automaticOverlayTimer) {
-      clearTimeout(_automaticOverlayTimer);
-      _automaticOverlayTimer = null;
+    if (!_automaticOverlayTimer) {
+      _automaticOverlayTimer = setTimeout(() => {
+        hideAutomaticOverlay();
+      }, 30000);
     }
-
-    _automaticOverlayTimer = setTimeout(() => {
-      hideAutomaticOverlay();
-    }, 30000);
   }
 
   /**
@@ -1347,10 +2026,7 @@ try {
     const domain = overlayNormalizeDomain(window.location.hostname);
     if (!domain || domain === 'unknown') return;
     if (isExcludedPage()) return;
-
-    const risk = evaluateWebsiteRisk();
-    const isHigh = risk.riskLevel === 'High';
-    if (!isHigh && isDismissed(domain)) return;
+    if (isDismissed(domain)) return;
 
     // Prevent duplicates
     if (document.getElementById(OVERLAY_HOST_ID)) return;
@@ -1392,7 +2068,9 @@ try {
     const dashboardBtn = shadow.getElementById('btn-open-dashboard');
     if (dashboardBtn) {
       dashboardBtn.addEventListener('click', () => {
-        chrome.runtime.sendMessage({ type: 'OPEN_DASHBOARD' }).catch(() => {});
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+          chrome.runtime.sendMessage({ type: 'OPEN_DASHBOARD' }).catch(() => {});
+        }
         window.open('http://localhost:5173', '_blank');
       });
     }
@@ -1463,120 +2141,23 @@ try {
   // -------------------------------------------------------
   // Listen for live data updates from background
   // -------------------------------------------------------
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message && message.type === 'OVERLAY_DATA_UPDATE') {
-      refreshOverlayUI();
-    } else if (message && message.type === 'GET_DOM_METADATA') {
-      try {
-        const metaDesc = document.querySelector('meta[name="description"]')?.content || 
-                         document.querySelector('meta[property="og:description"]')?.content || 
-                         document.querySelector('meta[property="twitter:description"]')?.content || '';
-        
-        const headings = Array.from(document.querySelectorAll('h1, h2'))
-          .slice(0, 3)
-          .map(h => h.innerText.trim())
-          .filter(t => t.length > 0);
-          
-        sendResponse({
-          title: document.title || '',
-          metaDescription: metaDesc || '',
-          headings: headings || []
-        });
-      } catch (err) {
-        sendResponse({ title: document.title || '', metaDescription: '', headings: [] });
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message && message.type === 'OVERLAY_DATA_UPDATE') {
+        refreshOverlayUI();
       }
-      return true;
-    }
-  });
+    });
+  }
 
   // -------------------------------------------------------
   // Initial display — triggers 30s automatic overlay
   // -------------------------------------------------------
   if (document.readyState === 'complete') {
-    setTimeout(triggerAutomaticOverlay, 400);
+    setTimeout(() => triggerAutomaticOverlay(), 400);
   } else {
     window.addEventListener('load', () => {
-      setTimeout(triggerAutomaticOverlay, 400);
+      setTimeout(() => triggerAutomaticOverlay(), 400);
     });
   }
 
 })();
-
-// --- SHARED AUTHENTICATION SYNC WITH WEB DASHBOARD ---
-function checkIsDashboard() {
-  return window.location.port === '5173' || 
-         window.location.hostname === 'localhost' || 
-         window.location.hostname === '127.0.0.1' ||
-         (document.title && document.title.includes('PrivacyLens'));
-}
-
-// Listen for active queries from page (registered unconditionally)
-window.addEventListener('message', async (event) => {
-  const message = event.data;
-  if (message && message.direction === 'from-page') {
-    console.log('[RECLAIM Content Script] Received message from page:', message);
-    if (!checkIsDashboard()) {
-      console.log('[RECLAIM Content Script] checkIsDashboard failed for:', window.location.href);
-      return;
-    }
-
-    if (message.type === 'GetExtensionSession') {
-      try {
-        const data = await chrome.storage.local.get(['session']);
-        console.log('[RECLAIM Content Script] Sending ExtensionSessionResponse:', data.session);
-        window.postMessage({
-          direction: 'from-content-script',
-          type: 'ExtensionSessionResponse',
-          detail: data.session || null
-        }, '*');
-      } catch (err) {
-        console.error('Failed to get session from extension:', err);
-      }
-    } else if (message.type === 'SetExtensionSession') {
-      try {
-        if (message.detail) {
-          console.log('[RECLAIM Content Script] Saving session to storage:', message.detail);
-          await chrome.storage.local.set({ session: message.detail });
-        }
-      } catch (err) {
-        console.error('Failed to save session in extension:', err);
-      }
-    } else if (message.type === 'ClearExtensionSession') {
-      try {
-        console.log('[RECLAIM Content Script] Clearing session from storage');
-        await chrome.storage.local.remove(['session']);
-      } catch (err) {
-        console.error('Failed to clear session in extension:', err);
-      }
-    } else if (message.type === 'ClearExtensionData') {
-      try {
-        console.log('[RECLAIM Content Script] Received ClearExtensionData request, forwarding to background script...');
-        chrome.runtime.sendMessage({ type: 'CLEAR_ALL_DATA' });
-      } catch (err) {
-        console.error('Failed to send CLEAR_ALL_DATA to background:', err);
-      }
-    } else if (message.type === 'PingExtension') {
-      console.log('[RECLAIM Content Script] Received PingExtension, replying with PongExtension...');
-      window.postMessage({
-        direction: 'from-content-script',
-        type: 'PongExtension'
-      }, '*');
-    }
-  }
-});
-
-// Startup Broadcast: Immediately push current session state to avoid race conditions
-(async () => {
-  if (!checkIsDashboard()) return;
-  try {
-    const data = await chrome.storage.local.get(['session']);
-    window.postMessage({
-      direction: 'from-content-script',
-      type: 'ExtensionSessionResponse',
-      detail: data.session || null
-    }, '*');
-  } catch (err) {
-    console.error('Failed to broadcast initial session on load:', err);
-  }
-})();
-
